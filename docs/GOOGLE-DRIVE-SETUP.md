@@ -4,7 +4,7 @@ Google Drive backup stays switched off until the site is given a **Google OAuth 
 
 Nothing secret is involved. The client ID is a public identifier; the app has no client secret, API key or stored token.
 
-> The names of Google Cloud Console pages change from time to time. These steps were carried out in a real console on 6 November 2026 for this site (project `GymBook`, owned by the gym's Google account). At that time the console called the pages *Google Auth Platform* → *Branding*, *Audience*, *Data Access* and *Clients*; a label may differ slightly from what you see later.
+> The names of Google Cloud Console pages change from time to time. These steps were carried out in a real console on 6 November 2026 and again on 7 November 2026 for this site (project `GymBook`, id `gymbook-514006`, owned by the gym's Google account khetrirajan55@gmail.com). At that time the console called the pages *Google Auth Platform* → *Branding*, *Audience*, *Data Access* and *Clients*; a label may differ slightly from what you see later.
 
 ## What you will end up with
 
@@ -34,7 +34,7 @@ Nothing secret is involved. The client ID is a public identifier; the app has no
    - **Authorized JavaScript origins**, add both, exactly, with no path and no trailing slash:
 
      ```
-     https://adityakushwaha8421-crypto.github.io
+     https://khetrirajan55-tech.github.io
      http://localhost:5173
      ```
 
