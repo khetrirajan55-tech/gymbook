@@ -5,7 +5,7 @@ import { usePage, useApp } from '@/app/AppContext'
 import { useLiveQuery } from '@/hooks/useLiveQuery'
 import { loadSnapshot, SNAPSHOT_STORES } from '@/data/snapshot'
 import { memberRows, type MemberRow } from '@/domain/metrics'
-import { formatDate, compareDates, diffDays, instantToDateInTz } from '@/domain/dates'
+import { formatDate, compareDates, diffDays } from '@/domain/dates'
 import { formatINR } from '@/domain/money'
 import { cn } from '@/lib/cn'
 import { Card } from '@/components/ui/Card'
@@ -25,7 +25,7 @@ const PAGE_SIZE = 20
 
 export function MembersPage() {
   usePage('Members', 'Search, filter and manage gym members')
-  const { today, timezone } = useApp()
+  const { today } = useApp()
   const [params, setParams] = useSearchParams()
   const q = params.get('q') ?? ''
   const filter = (params.get('filter') as Filter) || 'all'
@@ -141,7 +141,7 @@ export function MembersPage() {
         <>
           <ul aria-label="Members" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {slice.map((r) => (
-              <MemberCard key={r.member.id} row={r} today={today} timezone={timezone} />
+              <MemberCard key={r.member.id} row={r} today={today} />
             ))}
           </ul>
           <Card>
@@ -154,19 +154,20 @@ export function MembersPage() {
 }
 
 /** One member as a card: who they are, where their membership stands, and the three facts the desk asks about. */
-function MemberCard({ row: r, today, timezone }: { row: MemberRow; today: string; timezone: string }) {
+function MemberCard({ row: r, today }: { row: MemberRow; today: string }) {
   const m = r.member
   const archived = m.status === 'archived'
   const daysLeft = r.current && r.state !== 'upcoming' ? diffDays(today, r.current.endDate) : null
+  // The expiry date itself sits in the facts row below, so this line carries the plan and how far along it is.
   const planLine = !r.current
     ? 'No plan yet'
     : r.state === 'upcoming'
       ? `${r.current.planName} · starts ${formatDate(r.current.startDate)}`
       : r.state === 'expired'
-        ? `${r.current.planName} · ended ${formatDate(r.current.endDate)}`
+        ? `${r.current.planName} · expired`
         : daysLeft === 0
           ? `${r.current.planName} · ends today`
-          : `${r.current.planName} · ends ${formatDate(r.current.endDate)} (${daysLeft} day${daysLeft === 1 ? '' : 's'})`
+          : `${r.current.planName} · ${daysLeft} day${daysLeft === 1 ? '' : 's'} left`
   const balanceCls = r.balancePaise > 0 ? 'font-medium text-danger' : r.balancePaise < 0 ? 'text-info' : 'text-muted'
   return (
     <li className={cn('surface-card pressable relative flex min-w-0 flex-col rounded-2xl p-4 hover:border-line-strong focus-within:border-line-strong', archived && 'opacity-80')}>
@@ -194,8 +195,8 @@ function MemberCard({ row: r, today, timezone }: { row: MemberRow; today: string
           <dd className={cn('tabular mt-0.5 truncate text-sm', balanceCls)}>{r.balancePaise === 0 ? '—' : formatINR(r.balancePaise)}</dd>
         </div>
         <div className="min-w-0">
-          <dt className="text-xs text-muted">Last visit</dt>
-          <dd className="mt-0.5 truncate text-sm">{r.lastVisitAt ? formatDate(instantToDateInTz(r.lastVisitAt, timezone)) : '—'}</dd>
+          <dt className="text-xs text-muted">Plan expiry</dt>
+          <dd className={cn('mt-0.5 truncate text-sm', r.state === 'expired' ? 'text-danger' : r.state === 'expiring' ? 'text-warn' : undefined)}>{r.current ? formatDate(r.current.endDate) : '—'}</dd>
         </div>
         <div className="min-w-0">
           <dt className="text-xs text-muted">Joined</dt>
