@@ -538,7 +538,7 @@ test.describe('5. list with 45 members', () => {
     await expect(main.getByRole('link', { name: 'Member 01' })).toBeVisible()
     await expect(main.getByRole('link', { name: 'Member 20' })).toBeVisible()
     await expect(main.getByRole('link', { name: 'Member 21' })).toHaveCount(0)
-    await expect(main.getByRole('row')).toHaveCount(21) // header + 20
+    await expect(main.getByRole('list', { name: 'Members' }).getByRole('listitem')).toHaveCount(20)
 
     await pager.getByRole('button', { name: 'Next page' }).click()
     await expect(page).toHaveURL(/page=2/)
@@ -546,7 +546,7 @@ test.describe('5. list with 45 members', () => {
     await expect(pager.getByRole('button', { name: 'Next page' })).toBeDisabled()
     await expect(main.getByRole('link', { name: 'Member 21' })).toBeVisible()
     await expect(main.getByRole('link', { name: 'Member 40' })).toBeVisible()
-    await expect(main.getByRole('row')).toHaveCount(21)
+    await expect(main.getByRole('list', { name: 'Members' }).getByRole('listitem')).toHaveCount(20)
 
     // reload keeps page 2
     await page.reload()
@@ -683,15 +683,16 @@ test.describe('5. list with 45 members', () => {
     await expect(pager).toContainText('1–1 of 1')
   })
 
-  it('sort directions: name, joined, column header toggles', async ({ page }) => {
+  it('sort directions: name, joined, via the Sort by control', async ({ page }) => {
     await onboard(page, 'empty')
     const data = seed()
     await seedMembers(page, data)
     await page.goto('/members')
     const main = page.getByRole('main')
+    const cards = main.getByRole('list', { name: 'Members' }).getByRole('listitem')
     const names = async () => {
-      await expect(main.locator('tbody tr').first()).toBeVisible()
-      return main.locator('tbody tr').locator('td:first-child a > span:last-child').allTextContents()
+      await expect(cards.first()).toBeVisible()
+      return cards.getByRole('link').allTextContents()
     }
     const sortSel = page.getByLabel('Sort by')
 
@@ -715,12 +716,8 @@ test.describe('5. list with 45 members', () => {
     const jdDesc = joinDates(await names())
     expect([...jdDesc].sort().reverse()).toEqual(jdDesc)
 
-    // header click toggles direction
+    // back to the default order
     await sortSel.selectOption('name:asc')
-    await main.getByRole('button', { name: /Member/ }).first().click()
-    await expect(page).toHaveURL(/dir=desc/)
-    await first3().toEqual(['Member 40', 'Member 39', 'Member 38'])
-    await main.getByRole('button', { name: /Member/ }).first().click()
     await expect(page).toHaveURL(/dir=asc/)
     await first3().toEqual(['Member 01', 'Member 02', 'Member 03'])
 

@@ -1,18 +1,17 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { UserPlus, Users } from 'lucide-react'
 import { usePage, useApp } from '@/app/AppContext'
 import { useLiveQuery } from '@/hooks/useLiveQuery'
-import { useIsDesktop } from '@/hooks/useMediaQuery'
 import { loadSnapshot, SNAPSHOT_STORES } from '@/data/snapshot'
 import { memberRows, type MemberRow } from '@/domain/metrics'
-import { formatDate, formatDateTime, compareDates } from '@/domain/dates'
+import { formatDate, compareDates, diffDays, instantToDateInTz } from '@/domain/dates'
 import { formatINR } from '@/domain/money'
+import { cn } from '@/lib/cn'
 import { Card } from '@/components/ui/Card'
 import { LinkButton } from '@/components/ui/Button'
 import { Select } from '@/components/ui/Field'
 import { SearchInput, Avatar, Tabs } from '@/components/ui/misc'
-import { Table, Th, Td, Tr, RowCard } from '@/components/ui/Table'
 import { Pagination, paginate } from '@/components/ui/Pagination'
 import { PageLoading } from '@/components/ui/Spinner'
 import { EmptyState, ErrorState } from '@/components/ui/EmptyState'
@@ -33,8 +32,6 @@ export function MembersPage() {
   const sort = (params.get('sort') as SortKey) || 'name'
   const dir = params.get('dir') === 'desc' ? 'desc' : 'asc'
   const page = Number(params.get('page') ?? '1') || 1
-  const isDesktop = useIsDesktop()
-  const navigate = useNavigate()
   const snap = useLiveQuery(loadSnapshot, [...SNAPSHOT_STORES])
 
   const update = (patch: Record<string, string | null>) => {
@@ -98,11 +95,6 @@ export function MembersPage() {
 
   const { slice, pageCount, page: safePage } = paginate(filtered, page, PAGE_SIZE)
 
-  const toggleSort = (key: SortKey) => {
-    if (sort === key) update({ dir: dir === 'asc' ? 'desc' : 'asc' })
-    else update({ sort: key, dir: key === 'balance' || key === 'lastVisit' ? 'desc' : 'asc' })
-  }
-
   if (snap.error) return <ErrorState message={snap.error} />
   if (!snap.data) return <PageLoading />
 
@@ -137,76 +129,77 @@ export function MembersPage() {
           { value: 'archived', label: 'Archived', count: counts.archived },
         ]}
       />
-      <Card>
-        {noMembersAtAll ? (
+      {noMembersAtAll ? (
+        <Card>
           <EmptyState icon={<Users className="h-5 w-5" aria-hidden />} title="No members yet" description="Add your first member to start selling memberships and recording attendance" action={<LinkButton to="/members/new" icon={<UserPlus className="h-4 w-4" aria-hidden />}>Add member</LinkButton>} />
-        ) : filtered.length === 0 ? (
+        </Card>
+      ) : filtered.length === 0 ? (
+        <Card>
           <EmptyState title="No members match" description={q ? `Nothing matches “${q}” in this filter.` : 'Try another filter.'} />
-        ) : isDesktop ? (
-          <Table>
-            <thead>
-              <tr>
-                <Th onSort={() => toggleSort('name')} active={sort === 'name'} sort={dir}>Member</Th>
-                <Th>Phone</Th>
-                <Th onSort={() => toggleSort('expiry')} active={sort === 'expiry'} sort={dir}>Membership</Th>
-                <Th onSort={() => toggleSort('balance')} active={sort === 'balance'} sort={dir} className="text-right">Balance</Th>
-                <Th onSort={() => toggleSort('lastVisit')} active={sort === 'lastVisit'} sort={dir}>Last visit</Th>
-                <Th onSort={() => toggleSort('joined')} active={sort === 'joined'} sort={dir}>Joined</Th>
-              </tr>
-            </thead>
-            <tbody>
-              {slice.map((r) => (
-                <Tr key={r.member.id} className="cursor-pointer" onClick={() => navigate(`/members/${r.member.id}`)}>
-                  <Td>
-                    <Link to={`/members/${r.member.id}`} className="flex items-center gap-3 font-medium hover:underline" onClick={(e) => e.stopPropagation()}>
-                      <Avatar name={r.member.name} src={r.member.photoDataUrl} size="sm" />
-                      <span className="flex items-center gap-2">
-                        {r.member.name}
-                        {r.member.sample ? <SampleBadge /> : null}
-                        {r.member.status === 'archived' ? <Badge tone="muted">Archived</Badge> : null}
-                      </span>
-                    </Link>
-                  </Td>
-                  <Td className="tabular text-muted">{r.member.phone}</Td>
-                  <Td>
-                    <span className="flex items-center gap-2">
-                      <MembershipStateBadge state={r.state} />
-                      {r.current ? <span className="text-xs text-muted">{r.current.planName} · {r.state === 'upcoming' ? `from ${formatDate(r.current.startDate)}` : `to ${formatDate(r.current.endDate)}`}</span> : null}
-                    </span>
-                  </Td>
-                  <Td className={`tabular text-right ${r.balancePaise > 0 ? 'font-medium text-danger' : r.balancePaise < 0 ? 'text-info' : 'text-muted'}`}>{r.balancePaise === 0 ? '—' : formatINR(r.balancePaise)}</Td>
-                  <Td className="text-muted">{r.lastVisitAt ? formatDateTime(r.lastVisitAt, timezone) : '—'}</Td>
-                  <Td className="text-muted">{formatDate(r.member.joiningDate)}</Td>
-                </Tr>
-              ))}
-            </tbody>
-          </Table>
-        ) : (
-          <div>
+        </Card>
+      ) : (
+        <>
+          <ul aria-label="Members" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {slice.map((r) => (
-              <RowCard key={r.member.id} onClick={() => navigate(`/members/${r.member.id}`)}>
-                <div className="flex items-start gap-3">
-                  <Avatar name={r.member.name} src={r.member.photoDataUrl} />
-                  <div className="min-w-0 flex-1">
-                    <p className="flex flex-wrap items-center gap-2 font-medium">
-                      {r.member.name}
-                      {r.member.sample ? <SampleBadge /> : null}
-                      {r.member.status === 'archived' ? <Badge tone="muted">Archived</Badge> : null}
-                    </p>
-                    <p className="tabular text-sm text-muted">{r.member.phone}</p>
-                    <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-muted">
-                      <MembershipStateBadge state={r.state} />
-                      {r.current ? <span>{r.current.planName} · to {formatDate(r.current.endDate)}</span> : null}
-                    </div>
-                  </div>
-                  {r.balancePaise > 0 ? <span className="tabular shrink-0 text-sm font-medium text-danger">{formatINR(r.balancePaise)}</span> : null}
-                </div>
-              </RowCard>
+              <MemberCard key={r.member.id} row={r} today={today} timezone={timezone} />
             ))}
-          </div>
-        )}
-        <Pagination page={safePage} pageCount={pageCount} total={filtered.length} pageSize={PAGE_SIZE} onChange={(p) => update({ page: String(p) })} />
-      </Card>
+          </ul>
+          <Card>
+            <Pagination page={safePage} pageCount={pageCount} total={filtered.length} pageSize={PAGE_SIZE} onChange={(p) => update({ page: String(p) })} />
+          </Card>
+        </>
+      )}
     </div>
+  )
+}
+
+/** One member as a card: who they are, where their membership stands, and the three facts the desk asks about. */
+function MemberCard({ row: r, today, timezone }: { row: MemberRow; today: string; timezone: string }) {
+  const m = r.member
+  const archived = m.status === 'archived'
+  const daysLeft = r.current && r.state !== 'upcoming' ? diffDays(today, r.current.endDate) : null
+  const planLine = !r.current
+    ? 'No plan yet'
+    : r.state === 'upcoming'
+      ? `${r.current.planName} · starts ${formatDate(r.current.startDate)}`
+      : r.state === 'expired'
+        ? `${r.current.planName} · ended ${formatDate(r.current.endDate)}`
+        : daysLeft === 0
+          ? `${r.current.planName} · ends today`
+          : `${r.current.planName} · ends ${formatDate(r.current.endDate)} (${daysLeft} day${daysLeft === 1 ? '' : 's'})`
+  const balanceCls = r.balancePaise > 0 ? 'font-medium text-danger' : r.balancePaise < 0 ? 'text-info' : 'text-muted'
+  return (
+    <li className={cn('surface-card pressable relative flex min-w-0 flex-col rounded-2xl p-4 hover:border-line-strong focus-within:border-line-strong', archived && 'opacity-80')}>
+      <div className="flex items-start gap-3">
+        <Avatar name={m.name} src={m.photoDataUrl} size="lg" />
+        <div className="min-w-0 flex-1">
+          <p className="flex flex-wrap items-center gap-x-2 gap-y-1 leading-5">
+            {/* The name is the link; its ::after stretches over the whole card so anywhere on it opens the member. */}
+            <Link to={`/members/${m.id}`} className="truncate font-medium text-ink outline-none hover:underline after:absolute after:inset-0 after:rounded-2xl">
+              {m.name}
+            </Link>
+            {m.sample ? <SampleBadge /> : null}
+            {archived ? <Badge tone="muted">Archived</Badge> : null}
+          </p>
+          <p className="tabular mt-0.5 text-sm text-muted">{m.phone}</p>
+        </div>
+        <MembershipStateBadge state={r.state} />
+      </div>
+      <p className={cn('mt-3 text-sm', r.current ? 'text-ink' : 'text-muted')}>{planLine}</p>
+      <dl className="mt-3 grid grid-cols-3 gap-2 border-t border-line pt-3">
+        <div className="min-w-0">
+          <dt className="text-xs text-muted">Balance</dt>
+          <dd className={cn('tabular mt-0.5 truncate text-sm', balanceCls)}>{r.balancePaise === 0 ? '—' : formatINR(r.balancePaise)}</dd>
+        </div>
+        <div className="min-w-0">
+          <dt className="text-xs text-muted">Last visit</dt>
+          <dd className="mt-0.5 truncate text-sm">{r.lastVisitAt ? formatDate(instantToDateInTz(r.lastVisitAt, timezone)) : '—'}</dd>
+        </div>
+        <div className="min-w-0">
+          <dt className="text-xs text-muted">Joined</dt>
+          <dd className="mt-0.5 truncate text-sm">{formatDate(m.joiningDate)}</dd>
+        </div>
+      </dl>
+    </li>
   )
 }

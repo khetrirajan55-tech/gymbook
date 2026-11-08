@@ -134,7 +134,7 @@ Findings fixed during the pass:
 
 ## Branding and GitHub Pages deploy (2026-10-29)
 
-Branded for R.K. Gym Fitness Centre (name, address, phone, RK invoice prefix, RK monogram logo, crimson palette) and deployed to GitHub Pages at https://adityakushwaha8421-crypto.github.io/gymbook/ via `.github/workflows/pages.yml` (moved on 2026-11-07 to https://khetrirajan55-tech.github.io/gymbook/ under the `khetrirajan55-tech` account; the old repository was then deleted).
+Branded for R.K. Gym Fitness Centre (name, address, phone, RK invoice prefix, RK monogram logo, crimson palette) and deployed to GitHub Pages at https://adityakushwaha8421-crypto.github.io/gymbook/ via `.github/workflows/pages.yml` (moved on 2026-11-07 to https://khetrirajan55-tech.github.io/gymbook/ under the `khetrirajan55-tech` account; the old repository was kept at the owner's request and still serves the old copy).
 
 | Check | Result |
 | --- | --- |
