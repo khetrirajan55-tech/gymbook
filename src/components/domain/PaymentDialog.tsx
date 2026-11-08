@@ -102,7 +102,7 @@ export function PaymentDialog({ open, onClose, member, invoices, payments, adjus
           )}
         </Field>
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Amount received" required hint={selected ? `${formatINR(selected.bal.balancePaise)} outstanding on ${selected.invoice.number}` : undefined} error={form.errors.amount}>
+          <Field label="Amount received" required hint={selected ? <>{formatINR(selected.bal.balancePaise)} outstanding on <span className="whitespace-nowrap">{selected.invoice.number}</span></> : undefined} error={form.errors.amount}>
             {({ id, invalid, describedBy }) => <MoneyInput id={id} aria-invalid={invalid} aria-describedby={describedBy} value={form.values.amount} onChange={(e) => form.set('amount', e.target.value)} autoFocus />}
           </Field>
           <Field label="Method" required error={form.errors.method}>
@@ -114,7 +114,7 @@ export function PaymentDialog({ open, onClose, member, invoices, payments, adjus
               </Select>
             )}
           </Field>
-          <Field label="Received at" required error={form.errors.receivedAt}>
+          <Field label="Received at" required error={form.errors.receivedAt} className="sm:col-span-2">
             {({ id, invalid }) => <Input id={id} type="datetime-local" aria-invalid={invalid} value={form.values.receivedAt} onChange={(e) => form.set('receivedAt', e.target.value)} />}
           </Field>
           <Field label="Reference" hint="UPI ID, transaction no., cheque no" error={form.errors.reference}>

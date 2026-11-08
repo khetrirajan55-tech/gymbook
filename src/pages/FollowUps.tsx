@@ -98,7 +98,7 @@ export function FollowUpsPage() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <Tabs value={tab} onChange={setTab} items={[{ value: 'open', label: 'Open', count: counts.open }, { value: 'done', label: 'Done', count: counts.done }]} />
         <div className="flex flex-wrap items-center gap-2">
-          <Select aria-label="Type" value={typeFilter} onChange={(e) => setTypeFilter(e.target.value as 'all' | FollowUpType)} className="h-10 w-auto text-sm">
+          <Select aria-label="Type" value={typeFilter} onChange={(e) => setTypeFilter(e.target.value as 'all' | FollowUpType)} className="w-full text-sm sm:w-auto">
             <option value="all">All types</option>
             {FOLLOWUP_TYPES.map((t) => (
               <option key={t.value} value={t.value}>{t.label}</option>
@@ -168,14 +168,14 @@ export function FollowUpsPage() {
             {suggestions.expiry.slice(0, 5).map((r) => (
               <li key={'e' + r.member.id} className="flex items-center gap-3 px-4 py-2.5 sm:px-5">
                 <Badge tone="warn">Expiry</Badge>
-                <span className="min-w-0 flex-1 truncate text-sm"><Link to={`/members/${r.member.id}`} className="font-medium hover:underline">{r.member.name}</Link> <span className="text-muted">· {r.current?.planName} ended {formatDate(r.current?.endDate)}</span></span>
+                <span className="flex min-w-0 flex-1 flex-col text-sm sm:flex-row sm:items-baseline sm:gap-1"><Link to={`/members/${r.member.id}`} className="truncate font-medium hover:underline">{r.member.name}</Link>{' '}<span className="truncate text-muted"><span className="hidden sm:inline">· </span>{r.current?.planName} ended {formatDate(r.current?.endDate)}</span></span>
                 <Button size="sm" variant="secondary" onClick={() => setEditing({ prefill: { type: 'expiry', memberId: r.member.id, dueDate: today, note: `${r.current?.planName} ended ${formatDate(r.current?.endDate)}; offer renewal` } })}>Add</Button>
               </li>
             ))}
             {suggestions.payment.slice(0, 5).map((r) => (
               <li key={'p' + r.member.id} className="flex items-center gap-3 px-4 py-2.5 sm:px-5">
                 <Badge tone="danger">Payment</Badge>
-                <span className="min-w-0 flex-1 truncate text-sm"><Link to={`/members/${r.member.id}?tab=payments`} className="font-medium hover:underline">{r.member.name}</Link> <span className="text-muted">· owes {formatINR(r.balancePaise)}</span></span>
+                <span className="flex min-w-0 flex-1 flex-col text-sm sm:flex-row sm:items-baseline sm:gap-1"><Link to={`/members/${r.member.id}?tab=payments`} className="truncate font-medium hover:underline">{r.member.name}</Link>{' '}<span className="shrink-0 text-muted"><span className="hidden sm:inline">· </span>owes {formatINR(r.balancePaise)}</span></span>
                 <Button size="sm" variant="secondary" onClick={() => setEditing({ prefill: { type: 'payment', memberId: r.member.id, dueDate: today, note: `Collect outstanding ${formatINR(r.balancePaise)}` } })}>Add</Button>
               </li>
             ))}
@@ -202,8 +202,8 @@ export function FollowUpsPage() {
                       <p className="flex flex-wrap items-center gap-2 text-sm">
                         {c.member ? <Link to={`/members/${c.member.id}`} className="font-medium hover:underline">{c.name}</Link> : <span className="font-medium">{c.name}</span>}
                         <Badge tone={typeTone[f.type]}>{labelFor(FOLLOWUP_TYPES, f.type)}</Badge>
-                        {f.sample ? <SampleBadge /> : null}
                         {overdue ? <Badge tone="danger">Overdue</Badge> : dueToday ? <Badge tone="warn">Due today</Badge> : null}
+                        {f.sample ? <SampleBadge /> : null}
                       </p>
                       <p className="text-sm text-muted">{f.note || '—'}</p>
                       <p className="text-xs text-muted">
@@ -220,13 +220,13 @@ export function FollowUpsPage() {
                     <span className="flex-1" />
                     {f.status === 'open' ? (
                       <>
-                        <Button size="sm" variant="ghost" icon={<CalendarClock className="h-4 w-4" aria-hidden />} onClick={() => setRescheduling(f)}>Reschedule</Button>
-                        <Button size="sm" variant="ghost" icon={<Pencil className="h-4 w-4" aria-hidden />} onClick={() => setEditing(f)}>Edit</Button>
+                        <Button size="sm" variant="secondary" icon={<CalendarClock className="h-4 w-4" aria-hidden />} onClick={() => setRescheduling(f)}>Reschedule</Button>
+                        <Button size="sm" variant="secondary" icon={<Pencil className="h-4 w-4" aria-hidden />} onClick={() => setEditing(f)}>Edit</Button>
                         <Button size="sm" variant="secondary" icon={<Check className="h-4 w-4" aria-hidden />} onClick={() => act(() => setFollowUpStatus(f.id, f.rev, 'done'), 'Marked done')}>Done</Button>
                       </>
                     ) : (
                       <>
-                        <Button size="sm" variant="ghost" icon={<RotateCcw className="h-4 w-4" aria-hidden />} onClick={() => act(() => setFollowUpStatus(f.id, f.rev, 'open'), 'Reopened')}>Reopen</Button>
+                        <Button size="sm" variant="secondary" icon={<RotateCcw className="h-4 w-4" aria-hidden />} onClick={() => act(() => setFollowUpStatus(f.id, f.rev, 'open'), 'Reopened')}>Reopen</Button>
                         <Button size="sm" variant="ghost" icon={<Trash2 className="h-4 w-4" aria-hidden />} onClick={() => setDeleting(f)}>Delete</Button>
                       </>
                     )}

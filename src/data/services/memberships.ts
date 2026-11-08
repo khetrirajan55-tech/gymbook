@@ -3,7 +3,7 @@ import { logActivity, stampNew, withIdempotency, type AnyWriteTx } from '../repo
 import type { Member, Membership, Plan, Payment, PaymentMethod, ISODate, Paise } from '@/domain/types'
 import type { MemberFormValues } from '@/domain/validation'
 import { insertMember } from './members'
-import { membershipEndDate, addDays, compareDates, formatDate, todayInTz, DEFAULT_TIMEZONE } from '@/domain/dates'
+import { membershipEndDate, addDays, compareDates, formatDate, formatSpan, todayInTz, DEFAULT_TIMEZONE } from '@/domain/dates'
 import { formatINR } from '@/domain/money'
 import { DomainError } from '../errors'
 import { buildInvoice, nextInvoiceNumber } from './invoicing'
@@ -71,7 +71,7 @@ async function sellInTx(tx: AnyWriteTx, member: Member, input: SaleInput): Promi
     issueDate: input.issueDate ?? todayInTz((await tx.objectStore('settings').get('settings'))?.timezone ?? DEFAULT_TIMEZONE),
     lines: [
       {
-        description: `${plan.name} membership (${plan.durationValue} ${plan.durationUnit}) · ${formatDate(input.startDate)} to ${formatDate(endDate)}`,
+        description: `${plan.name} membership (${formatSpan(plan.durationValue, plan.durationUnit)}) · ${formatDate(input.startDate)} to ${formatDate(endDate)}`,
         quantity: 1,
         unitPricePaise: plan.pricePaise,
         amountPaise: plan.pricePaise,

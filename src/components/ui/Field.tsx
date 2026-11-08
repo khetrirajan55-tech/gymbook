@@ -44,12 +44,9 @@ export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputE
   return <input ref={ref} className={cn(controlClasses, 'h-control', className)} {...rest} />
 })
 
-const chevron =
-  "bg-[url(\"data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' stroke='%23929290' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m4 6 4 4 4-4'/%3E%3C/svg%3E\")]"
-
 export const Select = forwardRef<HTMLSelectElement, SelectHTMLAttributes<HTMLSelectElement>>(function Select({ className, children, ...rest }, ref) {
   return (
-    <select ref={ref} className={cn(controlClasses, 'h-control appearance-none bg-[length:16px] bg-[right_10px_center] bg-no-repeat pr-9', chevron, className)} {...rest}>
+    <select ref={ref} className={cn(controlClasses, 'select-chevron h-control appearance-none pr-9', className)} {...rest}>
       {children}
     </select>
   )

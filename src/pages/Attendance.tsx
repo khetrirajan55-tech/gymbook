@@ -157,11 +157,11 @@ export function AttendancePage() {
           description={`${history.length} visit${history.length === 1 ? '' : 's'} ${from === to ? `on ${formatDate(from)}` : `from ${formatDate(from)} to ${formatDate(to)}`}`}
           action={
             <div className="flex flex-wrap items-center gap-2">
-              <Button size="sm" variant="ghost" onClick={() => setRange(today, today)}>Today</Button>
-              <Button size="sm" variant="ghost" onClick={() => setRange(addDays(today, -6), today)}>7 days</Button>
-              <Input type="date" aria-label="From date" value={from} max={to} onChange={(e) => isISODate(e.target.value) && setRange(e.target.value, e.target.value > to ? e.target.value : to)} className="h-9 w-auto text-sm" />
+              <Button size="sm" variant="outline" onClick={() => setRange(today, today)}>Today</Button>
+              <Button size="sm" variant="outline" onClick={() => setRange(addDays(today, -6), today)}>7 days</Button>
+              <Input type="date" aria-label="From date" value={from} max={to} onChange={(e) => isISODate(e.target.value) && setRange(e.target.value, e.target.value > to ? e.target.value : to)} className="w-auto" />
               <span className="text-sm text-muted">to</span>
-              <Input type="date" aria-label="To date" value={to} min={from} onChange={(e) => isISODate(e.target.value) && setRange(from, e.target.value)} className="h-9 w-auto text-sm" />
+              <Input type="date" aria-label="To date" value={to} min={from} onChange={(e) => isISODate(e.target.value) && setRange(from, e.target.value)} className="w-auto" />
             </div>
           }
         />

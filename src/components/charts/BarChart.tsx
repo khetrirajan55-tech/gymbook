@@ -67,7 +67,8 @@ export function BarChart({ labels, series, height: maxHeight = 200, className, e
                 return <rect key={s.key} x={x} y={padT + innerH - h} width={barW} height={h} rx={2} fill={s.color} opacity={hover === null || hover === i ? 1 : 0.6} />
               })}
               {i % tickEvery === 0 ? (
-                <text x={gx + groupW / 2} y={height - 6} textAnchor="middle" fontSize={11} fontFamily="'IBM Plex Mono', ui-monospace, monospace" fill="rgb(var(--c-faint))">
+                // Keep the first and last labels inside the drawing: a centred label can hang past the edge.
+                <text x={Math.min(width - padR - label.length * 3.4, Math.max(padL + label.length * 3.4, gx + groupW / 2))} y={height - 6} textAnchor="middle" fontSize={11} fontFamily="'IBM Plex Mono', ui-monospace, monospace" fill="rgb(var(--c-faint))">
                   {label}
                 </text>
               ) : null}

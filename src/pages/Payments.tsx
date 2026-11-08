@@ -108,7 +108,7 @@ export function PaymentsPage() {
     <div className="flex flex-col gap-4">
       <Card>
         <CardHeader title="Record a payment" description="For money already received at the desk or by UPI/bank. GymBook records payments; it does not collect them." />
-        <CardBody className="flex flex-col gap-3 sm:flex-row sm:items-start">
+        <CardBody className="flex flex-col gap-3 sm:flex-row sm:items-center">
           <div className="min-w-0 flex-1">
             <MemberPicker id="payment-member-picker" rows={pickerRows} value={picked} onChange={setPicked} placeholder="Who paid? Search name or phone" />
           </div>
@@ -166,7 +166,7 @@ export function PaymentsPage() {
                         <Td><Link to={`/members/${p.memberId}?tab=payments`} className="flex items-center gap-2 font-medium hover:underline">{m?.name ?? 'Unknown'}{p.sample ? <SampleBadge /> : null}</Link></Td>
                         <Td className={`tabular text-right font-medium ${p.status === 'void' ? 'line-through' : ''}`}>{formatINR(p.amountPaise)}</Td>
                         <Td>{labelFor(PAYMENT_METHODS, p.method)}{p.status === 'void' ? <Badge tone="muted" className="ml-2">Void</Badge> : null}</Td>
-                        <Td>{inv ? <Link to={`/invoices/${inv.id}`} className="text-accent-ink hover:underline">{inv.number}</Link> : <span className="text-muted">Credit</span>}</Td>
+                        <Td>{inv ? <Link to={`/invoices/${inv.id}`} className="inline-flex items-center gap-1.5 font-medium hover:underline"><FileText className="h-4 w-4 text-muted" aria-hidden />{inv.number}</Link> : <span className="text-muted">Credit</span>}</Td>
                         <Td className="max-w-[14rem] truncate text-muted">{[p.reference, p.note, p.voidReason ? `Void: ${p.voidReason}` : ''].filter(Boolean).join(' · ')}</Td>
                       </Tr>
                     )
@@ -185,7 +185,7 @@ export function PaymentsPage() {
                       <Avatar name={m?.name ?? '?'} src={m?.photoDataUrl} size="sm" />
                       <div className="min-w-0 flex-1">
                         <Link to={`/members/${p.memberId}?tab=payments`} className="block truncate text-sm font-medium hover:underline">{m?.name ?? 'Unknown'}</Link>
-                        <p className="text-xs text-muted">{formatDateTime(p.receivedAt, timezone)} · {labelFor(PAYMENT_METHODS, p.method)}{inv ? ` · ${inv.number}` : ' · credit'}</p>
+                        <p className="text-xs text-muted">{formatDateTime(p.receivedAt, timezone)} · {labelFor(PAYMENT_METHODS, p.method)} · {inv ? <span className="whitespace-nowrap">{inv.number}</span> : 'credit'}</p>
                         {p.status === 'void' ? <p className="text-xs text-danger">Void: {p.voidReason}</p> : null}
                       </div>
                       <span className={`tabular text-sm font-medium ${p.status === 'void' ? 'text-muted line-through' : ''}`}>{formatINR(p.amountPaise)}</span>
@@ -227,7 +227,7 @@ export function PaymentsPage() {
                     return (
                       <Tr key={inv.id}>
                         <Td><Link to={`/invoices/${inv.id}`} className="inline-flex items-center gap-1.5 font-medium hover:underline"><FileText className="h-4 w-4 text-muted" aria-hidden />{inv.number}</Link></Td>
-                        <Td><Link to={`/members/${inv.memberId}?tab=payments`} className="hover:underline">{m?.name ?? 'Unknown'}</Link></Td>
+                        <Td><Link to={`/members/${inv.memberId}?tab=payments`} className="font-medium hover:underline">{m?.name ?? 'Unknown'}</Link></Td>
                         <Td className="text-muted">{formatDate(inv.issueDate)}</Td>
                         <Td className="tabular text-right">{formatINR(bal.duePaise)}</Td>
                         <Td className="tabular text-right text-muted">{formatINR(bal.paidPaise)}</Td>
@@ -248,7 +248,7 @@ export function PaymentsPage() {
                     <div className="flex items-center justify-between gap-3">
                       <div className="min-w-0">
                         <Link to={`/invoices/${inv.id}`} className="block text-sm font-medium hover:underline">{inv.number}</Link>
-                        <p className="truncate text-xs text-muted">{m?.name ?? 'Unknown'} · {formatDate(inv.issueDate)} · {formatINR(bal.duePaise)}</p>
+                        <p className="text-xs text-muted"><span className="truncate">{m?.name ?? 'Unknown'}</span> · {formatDate(inv.issueDate)} · <span className="whitespace-nowrap">{formatINR(bal.duePaise)}</span></p>
                       </div>
                       <div className="flex flex-col items-end gap-1">
                         <PaymentStatusBadge status={bal.status} />

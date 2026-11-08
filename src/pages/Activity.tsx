@@ -80,7 +80,7 @@ export function ActivityPage() {
                   const k = KINDS.find((x) => x.value === a.kind)
                   return (
                     <li key={a.id} className="flex items-start gap-3 px-5 py-2.5">
-                      <Badge tone={k?.tone ?? 'neutral'} className="mt-0.5 w-24 justify-center">{k?.label ?? a.kind}</Badge>
+                      <Badge tone={k?.tone ?? 'neutral'} className="mt-0.5 shrink-0">{k?.label ?? a.kind}</Badge>
                       <div className="min-w-0 flex-1">
                         <p className="break-words text-sm">{a.memberId ? <Link to={`/members/${a.memberId}`} className="hover:underline">{a.message}</Link> : a.message}</p>
                         <p className="text-xs text-muted">{formatDateTime(a.at, timezone)}</p>

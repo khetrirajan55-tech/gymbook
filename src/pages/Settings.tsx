@@ -86,7 +86,7 @@ function GymDetailsForm() {
             <div className="flex flex-wrap gap-2">
               <input ref={fileRef} type="file" accept="image/*" className="sr-only" onChange={(e) => onLogo(e.target.files?.[0])} />
               <Button type="button" size="sm" variant="secondary" icon={<Camera className="h-4 w-4" aria-hidden />} onClick={() => fileRef.current?.click()}>{form.values.logoDataUrl ? 'Change logo' : 'Add logo'}</Button>
-              {form.values.logoDataUrl ? <Button type="button" size="sm" variant="ghost" onClick={() => form.set('logoDataUrl', undefined)}>Remove</Button> : null}
+              {form.values.logoDataUrl ? <Button type="button" size="sm" variant="outline" onClick={() => form.set('logoDataUrl', undefined)}>Remove</Button> : null}
             </div>
           </div>
           {logoError ? <p role="alert" className="text-xs font-medium text-danger">{logoError}</p> : null}
@@ -99,7 +99,7 @@ function GymDetailsForm() {
                 customTz ? (
                   <div className="flex gap-2">
                     <Input id={id} aria-invalid={invalid} value={form.values.timezone} onChange={(e) => form.set('timezone', e.target.value)} placeholder="e.g. Asia/Kolkata" />
-                    <Button type="button" variant="ghost" size="sm" onClick={() => { setCustomTz(false); if (!isValidTimezone(form.values.timezone)) form.set('timezone', 'Asia/Kolkata') }}>List</Button>
+                    <Button type="button" variant="outline" size="sm" onClick={() => { setCustomTz(false); if (!isValidTimezone(form.values.timezone)) form.set('timezone', 'Asia/Kolkata') }}>List</Button>
                   </div>
                 ) : (
                   <div className="flex gap-2">
@@ -108,7 +108,7 @@ function GymDetailsForm() {
                         <option key={tz} value={tz}>{tz}</option>
                       ))}
                     </Select>
-                    <Button type="button" variant="ghost" size="sm" onClick={() => setCustomTz(true)}>Other</Button>
+                    <Button type="button" variant="outline" size="sm" onClick={() => setCustomTz(true)}>Other</Button>
                   </div>
                 )
               }

@@ -106,8 +106,8 @@ export function ReportsPage() {
         <p className="text-sm text-muted">{formatDate(period.start)} – {formatDate(period.end)} · {settings.timezone}</p>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
-        <Stat label="Revenue received" value={formatINR(finance.receivedPaise)} hint={`${finance.paymentsCount} payment${finance.paymentsCount === 1 ? '' : 's'}`} tone="success" />
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 [&>:last-child]:col-span-2 md:[&>:last-child]:col-span-1">
+        <Stat label="Revenue received" value={formatINR(finance.receivedPaise)} hint={`${finance.paymentsCount} payment${finance.paymentsCount === 1 ? '' : 's'}`} />
         <Stat label="Invoiced" value={formatINR(finance.invoicedPaise)} hint={`${finance.invoicesCount} invoice${finance.invoicesCount === 1 ? '' : 's'} issued`} />
         <Stat label="Outstanding (all time)" value={formatINR(outstanding.totalPaise)} hint={`${outstanding.members} member${outstanding.members === 1 ? '' : 's'} owe money`} tone={outstanding.totalPaise > 0 ? 'danger' : undefined} />
       </div>
@@ -131,9 +131,9 @@ export function ReportsPage() {
           <CardHeader title="Attendance and memberships" description={`${attendanceTotal} visits by ${uniqueVisitors} member${uniqueVisitors === 1 ? '' : 's'} · ${newMemberships} new · ${renewals} renewal${renewals === 1 ? '' : 's'}`} />
           <CardBody>
             <BarChart height={220} labels={labels} series={[
-              { key: 'attendance', label: 'Visits', color: 'rgb(var(--c-ink) / 0.2)', values: series.points.map((p) => p.attendance), format: (v) => String(v) },
+              { key: 'attendance', label: 'Visits', color: 'rgb(var(--c-faint) / 0.7)', values: series.points.map((p) => p.attendance), format: (v) => String(v) },
               { key: 'new', label: 'New memberships', color: 'rgb(var(--c-success))', values: series.points.map((p) => p.newMemberships), format: (v) => String(v) },
-              { key: 'renewals', label: 'Renewals', color: 'rgb(var(--c-ink) / 0.45)', values: series.points.map((p) => p.renewals), format: (v) => String(v) },
+              { key: 'renewals', label: 'Renewals', color: 'rgb(var(--c-muted))', values: series.points.map((p) => p.renewals), format: (v) => String(v) },
             ]} />
           </CardBody>
         </Card>

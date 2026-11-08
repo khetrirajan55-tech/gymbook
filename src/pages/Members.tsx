@@ -173,15 +173,17 @@ function MemberCard({ row: r, today, timezone }: { row: MemberRow; today: string
       <div className="flex items-start gap-3">
         <Avatar name={m.name} src={m.photoDataUrl} size="lg" />
         <div className="min-w-0 flex-1">
-          <p className="flex flex-wrap items-center gap-x-2 gap-y-1 leading-5">
+          <p className="truncate leading-5">
             {/* The name is the link; its ::after stretches over the whole card so anywhere on it opens the member. */}
-            <Link to={`/members/${m.id}`} className="truncate font-medium text-ink outline-none hover:underline after:absolute after:inset-0 after:rounded-2xl">
+            <Link to={`/members/${m.id}`} className="font-medium text-ink outline-none hover:underline after:absolute after:inset-0 after:rounded-2xl">
               {m.name}
             </Link>
+          </p>
+          <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted">
+            <span className="tabular">{m.phone}</span>
             {m.sample ? <SampleBadge /> : null}
             {archived ? <Badge tone="muted">Archived</Badge> : null}
           </p>
-          <p className="tabular mt-0.5 text-sm text-muted">{m.phone}</p>
         </div>
         <MembershipStateBadge state={r.state} />
       </div>

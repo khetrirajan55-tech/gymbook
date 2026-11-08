@@ -28,6 +28,7 @@
   --c-success-soft: 228 244 236;
   --c-danger: 188 44 22;
   --c-danger-soft: 254 234 229;
+  --c-danger-fg: 255 255 255;
   --c-warn: 138 92 0;
   --c-warn-soft: 255 244 210;
   --c-info: 29 93 160;
@@ -66,6 +67,7 @@
   --c-success-soft: 16 50 38;
   --c-danger: 255 128 104;
   --c-danger-soft: 64 28 22;
+  --c-danger-fg: 40 12 8;
   --c-warn: 240 190 84;
   --c-warn-soft: 54 42 14;
   --c-info: 104 168 240;
@@ -98,6 +100,7 @@
     --c-success-soft: 16 50 38;
     --c-danger: 255 128 104;
     --c-danger-soft: 64 28 22;
+    --c-danger-fg: 40 12 8;
     --c-warn: 240 190 84;
     --c-warn-soft: 54 42 14;
     --c-info: 104 168 240;
@@ -170,6 +173,13 @@
     box-shadow: var(--shadow-pop);
   }
   .tabular { font-variant-numeric: tabular-nums; }
+  /* Native <select>: our own chevron, drawn over the field's own surface in both themes. */
+  .select-chevron {
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' stroke='%23929290' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m4 6 4 4 4-4'/%3E%3C/svg%3E");
+    background-size: 16px;
+    background-position: right 10px center;
+    background-repeat: no-repeat;
+  }
   .kbd {
     display: inline-flex;
     align-items: center;

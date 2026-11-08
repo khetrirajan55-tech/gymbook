@@ -14,7 +14,7 @@ import { setMemberArchived } from '@/data/services/members'
 import { checkOut } from '@/data/services/attendance'
 import { voidPayment, voidInvoice } from '@/data/services/payments'
 import { membershipState, memberMembershipState, invoiceBalance, memberBalance, pickCurrentMembership, latestEndDate } from '@/domain/membership'
-import { formatDate, formatDateTime, formatDuration, compareDates, diffDays } from '@/domain/dates'
+import { formatDate, formatDateTime, formatDuration, formatSpan, compareDates, diffDays } from '@/domain/dates'
 import { formatINR } from '@/domain/money'
 import { labelFor, PAYMENT_METHODS } from '@/domain/types'
 import { Card, CardBody, CardHeader } from '@/components/ui/Card'
@@ -182,10 +182,10 @@ export function MemberDetailPage() {
             <Button variant="secondary" size="sm" icon={<MessageCircle className="h-4 w-4" aria-hidden />} onClick={() => setShare('details')}>
               WhatsApp
             </Button>
-            <LinkButton to={`/members/${member.id}/edit`} variant="ghost" size="sm" icon={<Pencil className="h-4 w-4" aria-hidden />}>
+            <LinkButton to={`/members/${member.id}/edit`} variant="secondary" size="sm" icon={<Pencil className="h-4 w-4" aria-hidden />}>
               Edit
             </LinkButton>
-            <Button variant="ghost" size="sm" icon={archived ? <ArchiveRestore className="h-4 w-4" aria-hidden /> : <Archive className="h-4 w-4" aria-hidden />} onClick={() => setDialog('archive')}>
+            <Button variant="secondary" size="sm" icon={archived ? <ArchiveRestore className="h-4 w-4" aria-hidden /> : <Archive className="h-4 w-4" aria-hidden />} onClick={() => setDialog('archive')}>
               {archived ? 'Restore' : 'Archive'}
             </Button>
           </div>
@@ -220,7 +220,10 @@ export function MemberDetailPage() {
                 { label: 'Record', value: `Updated ${formatDateTime(member.updatedAt, timezone)}` },
               ]} />
             </CardBody>
-            <CardHeader title="Profile" description="Health notes are for staff only" />
+            <div className="border-t border-line px-5 pt-4">
+              <h3 className="text-sm font-medium">Profile</h3>
+              <p className="text-xs text-muted">Health notes are for staff only</p>
+            </div>
             <CardBody>
               <KeyValue items={[
                 { label: 'Member code', value: member.memberCode ? <span className="font-mono">{member.memberCode}</span> : '—' },
@@ -246,13 +249,13 @@ export function MemberDetailPage() {
               )}
               {!archived ? (
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                  <Select aria-label="Assign workout plan" value={member.workoutPlanId ?? ''} onChange={async (e) => { try { await assignWorkout(member.id, member.rev, e.target.value || null); toast.success(e.target.value ? 'Workout plan assigned' : 'Workout plan cleared') } catch (err) { toast.error('Could not assign plan', errorMessage(err)) } }} className="text-sm">
+                  <Select aria-label="Assign workout plan" value={member.workoutPlanId ?? ''} onChange={async (e) => { try { await assignWorkout(member.id, member.rev, e.target.value || null); toast.success(e.target.value ? 'Workout plan assigned' : 'Workout plan cleared') } catch (err) { toast.error('Could not assign plan', errorMessage(err)) } }} className="min-w-0 flex-1 text-sm">
                     <option value="">No plan</option>
                     {snap.data.workouts.filter((w) => !w.archived || w.id === member.workoutPlanId).map((w) => (
                       <option key={w.id} value={w.id}>{w.name} · {w.goal}{w.archived ? ' (archived)' : ''}</option>
                     ))}
                   </Select>
-                  <Link to="/workouts" className="text-sm text-accent-ink hover:underline">Manage plans</Link>
+                  <Link to="/workouts" className="shrink-0 whitespace-nowrap text-sm text-accent-ink hover:underline">Manage plans</Link>
                 </div>
               ) : null}
             </CardBody>
@@ -295,7 +298,7 @@ export function MemberDetailPage() {
                       </p>
                       {m.cancelReason ? <p className="text-xs text-muted">{m.cancelReason}</p> : null}
                       <p className="text-sm text-muted">
-                        {formatDate(m.startDate)} → {formatDate(m.endDate)} · {m.durationValue} {m.durationUnit} · {formatINR(m.pricePaise)}
+                        {formatDate(m.startDate)} → {formatDate(m.endDate)} · {formatSpan(m.durationValue, m.durationUnit)} · {formatINR(m.pricePaise)}
                         {m.discountPaise > 0 ? ` (list ${formatINR(m.listPricePaise)} − ${formatINR(m.discountPaise)} discount)` : ''}
                       </p>
                     </div>

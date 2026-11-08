@@ -8,7 +8,7 @@ import { listMembers, createMember, updateMember, findPossibleDuplicates, getMem
 import { createMemberWithMembership } from '@/data/services/memberships'
 import { listPlans } from '@/data/services/plans'
 import { newMemberForm, type NewMemberValues } from '@/domain/validation'
-import { membershipEndDate, formatDate, isISODate } from '@/domain/dates'
+import { membershipEndDate, formatDate, formatSpan, isISODate } from '@/domain/dates'
 import { formatINR, parseRupees } from '@/domain/money'
 import { useForm } from '@/lib/forms'
 import { fileToSmallDataUrl } from '@/lib/image'
@@ -208,7 +208,7 @@ function MemberFormInner({ mode, member }: { mode: 'new' | 'edit'; member?: Memb
                         <Select id={id} aria-invalid={invalid} value={form.values.planId} onChange={(e) => form.set('planId', e.target.value)}>
                           <option value="">No plan for now</option>
                           {activePlans.map((x) => (
-                            <option key={x.id} value={x.id}>{x.name} · {x.durationValue} {x.durationUnit} · {formatINR(x.pricePaise)}</option>
+                            <option key={x.id} value={x.id}>{x.name} · {formatSpan(x.durationValue, x.durationUnit)} · {formatINR(x.pricePaise)}</option>
                           ))}
                         </Select>
                       )}

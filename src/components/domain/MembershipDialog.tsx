@@ -4,7 +4,7 @@ import type { Member, Membership, Plan } from '@/domain/types'
 import { useForm } from '@/lib/forms'
 import { membershipForm, type MembershipFormValues } from '@/domain/validation'
 import { assignMembership, renewalStartOptions } from '@/data/services/memberships'
-import { membershipEndDate, formatDate, addDays, compareDates } from '@/domain/dates'
+import { membershipEndDate, formatDate, formatSpan, addDays, compareDates } from '@/domain/dates'
 import { formatINR, parseRupees } from '@/domain/money'
 import { latestEndDate } from '@/domain/membership'
 import { FormModal } from './FormModal'
@@ -89,7 +89,7 @@ export function MembershipDialog({ open, onClose, member, plans, memberships }: 
               <Select id={id} aria-invalid={invalid} value={form.values.planId} onChange={(e) => form.set('planId', e.target.value)}>
                 {activePlans.map((p) => (
                   <option key={p.id} value={p.id}>
-                    {p.name} · {p.durationValue} {p.durationUnit} · {formatINR(p.pricePaise)}
+                    {p.name} · {formatSpan(p.durationValue, p.durationUnit)} · {formatINR(p.pricePaise)}
                   </option>
                 ))}
               </Select>

@@ -96,8 +96,8 @@ export function Dashboard() {
                   <Link to={`/members/${r.member.id}`} className="pressable flex items-center gap-3 px-4 py-2.5 hover:bg-sunken/60 sm:px-5">
                     <Avatar name={r.member.name} src={r.member.photoDataUrl} size="sm" />
                     <span className="min-w-0 flex-1">
-                      <span className="flex items-center gap-2 truncate text-sm font-medium">
-                        {r.member.name}
+                      <span className="flex items-center gap-2 text-sm font-medium">
+                        <span className="truncate">{r.member.name}</span>
                         {r.member.sample ? <SampleBadge /> : null}
                       </span>
                       <span className="block text-xs text-muted">

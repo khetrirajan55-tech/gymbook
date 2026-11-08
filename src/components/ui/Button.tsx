@@ -7,11 +7,11 @@ export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'outl
 export type ButtonSize = 'sm' | 'md' | 'lg' | 'icon' | 'icon-sm'
 
 const variants: Record<ButtonVariant, string> = {
-  primary: 'bg-accent text-accent-fg hover:bg-accent-hover [box-shadow:inset_0_1px_0_rgb(255_255_255/0.18),0_1px_2px_rgb(0_0_0/0.16),0_6px_14px_-8px_rgb(0_0_0/0.28)]',
-  secondary: 'bg-surface text-ink border border-line hover:border-line-strong hover:bg-sunken/60 shadow-card',
-  outline: 'bg-transparent text-ink border border-line-strong hover:bg-sunken/60',
-  ghost: 'bg-transparent text-muted hover:bg-sunken/80 hover:text-ink',
-  danger: 'bg-danger text-white hover:brightness-110 shadow-[0_1px_0_rgb(0_0_0/0.1)]',
+  primary: 'bg-accent text-accent-fg hover:bg-accent-hover [box-shadow:inset_0_1px_0_rgb(255_255_255/0.18),0_1px_2px_rgb(0_0_0/0.16),0_6px_14px_-8px_rgb(0_0_0/0.28)] disabled:bg-sunken disabled:text-faint disabled:[box-shadow:none]',
+  secondary: 'bg-surface text-ink border border-line hover:border-line-strong hover:bg-sunken/60 shadow-card disabled:opacity-50',
+  outline: 'bg-transparent text-ink border border-line-strong hover:bg-sunken/60 disabled:opacity-50',
+  ghost: 'bg-transparent text-muted hover:bg-sunken/80 hover:text-ink disabled:opacity-50',
+  danger: 'bg-danger text-danger-fg hover:brightness-110 shadow-[0_1px_0_rgb(0_0_0/0.1)] disabled:bg-sunken disabled:text-faint disabled:shadow-none',
 }
 
 const sizes: Record<ButtonSize, string> = {
@@ -25,7 +25,8 @@ const sizes: Record<ButtonSize, string> = {
 export const buttonClasses = (variant: ButtonVariant = 'primary', size: ButtonSize = 'md', className?: string) =>
   cn(
     'pressable inline-flex items-center justify-center font-medium whitespace-nowrap select-none',
-    'disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none',
+    // A disabled filled button becomes a quiet grey slab; outlined ones just fade. Both read as 'not now' in either theme.
+    'disabled:cursor-not-allowed disabled:pointer-events-none',
     variants[variant],
     sizes[size],
     className,

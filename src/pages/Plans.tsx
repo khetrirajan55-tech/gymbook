@@ -8,7 +8,7 @@ import { planForm, type PlanFormValues } from '@/domain/validation'
 import { useForm } from '@/lib/forms'
 import type { Plan } from '@/domain/types'
 import { formatINR, paiseToInput } from '@/domain/money'
-import { membershipEndDate, formatDate } from '@/domain/dates'
+import { membershipEndDate, formatDate, formatSpan } from '@/domain/dates'
 import { useApp } from '@/app/AppContext'
 import { Card, CardHeader } from '@/components/ui/Card'
 import { PageActions } from '@/components/ui/PageActions'
@@ -76,7 +76,7 @@ export function PlansPage() {
             <Card key={p.id} className={p.archived ? 'opacity-70' : ''}>
               <CardHeader
                 title={<span className="flex flex-wrap items-center gap-2">{p.name}{p.sample ? <SampleBadge /> : null}{p.archived ? <Badge tone="muted">Archived</Badge> : null}</span>}
-                description={`${p.durationValue} ${p.durationUnit}${p.description ? ` · ${p.description}` : ''}`}
+                description={`${formatSpan(p.durationValue, p.durationUnit)}${p.description ? ` · ${p.description}` : ''}`}
               />
               <div className="px-4 pb-4 pt-3 sm:px-5">
                 <p className="tabular text-2xl font-medium">{formatINR(p.pricePaise)}</p>

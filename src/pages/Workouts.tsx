@@ -69,11 +69,13 @@ export function WorkoutsPage() {
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                     <button type="button" onClick={() => setExpanded(open ? null : w.id)} className="min-w-0 flex-1 text-left" aria-expanded={open}>
                       <p className="flex flex-wrap items-center gap-2 font-medium">
-                        {w.name}
+                        <span className="inline-flex items-center gap-1.5">
+                          {w.name}
+                          {open ? <ChevronUp className="h-4 w-4 text-faint" aria-hidden /> : <ChevronDown className="h-4 w-4 text-faint" aria-hidden />}
+                        </span>
                         <Badge tone={w.source === 'library' ? 'info' : 'neutral'}>{w.source === 'library' ? 'From library' : 'Custom'}</Badge>
                         {w.sample ? <SampleBadge /> : null}
                         {w.archived ? <Badge tone="muted">Archived</Badge> : null}
-                        {open ? <ChevronUp className="h-4 w-4 text-faint" aria-hidden /> : <ChevronDown className="h-4 w-4 text-faint" aria-hidden />}
                       </p>
                       <p className="text-sm text-muted">{w.goal} · {w.days.length} day{w.days.length === 1 ? '' : 's'} · {exerciseCount} exercises · {usage.get(w.id) ?? 0} member{(usage.get(w.id) ?? 0) === 1 ? '' : 's'}</p>
                       {w.description ? <p className="mt-0.5 text-sm text-muted">{w.description}</p> : null}

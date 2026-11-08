@@ -79,8 +79,9 @@ export function LiveDot() {
 /** A stat is a label, a figure and a line of context. Nothing decorative. */
 export function Stat({ label, value, hint, tone, to }: { label: ReactNode; value: ReactNode; hint?: ReactNode; tone?: 'danger' | 'warn' | 'success'; to?: string }) {
   // Long amounts step down a size so a five-up row never breaks "−" away from its number.
+  // On a phone these sit two-up in ~150px, so anything beyond a short figure steps down there too.
   const len = typeof value === 'string' ? value.length : 0
-  const size = len >= 12 ? 'text-lg' : len >= 10 ? 'text-xl' : 'text-3xl'
+  const size = len >= 12 ? 'text-lg' : len >= 10 ? 'text-xl' : len >= 8 ? 'text-xl sm:text-3xl' : 'text-3xl'
   const body = (
     <>
       <p className="text-xs text-muted">{label}</p>

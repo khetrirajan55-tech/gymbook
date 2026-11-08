@@ -141,6 +141,11 @@ export function compareDates(a: ISODate, b: ISODate): number {
  * Inclusive end date for a membership: the day before the duration elapses.
  * A 1-month plan starting 15 Jan ends 14 Feb; a 30-day plan starting 1 Mar ends 30 Mar.
  */
+/** "1 month", "3 months", "10 days": a plan length in words. */
+export function formatSpan(value: number, unit: DurationUnit): string {
+  return `${value} ${value === 1 ? unit.replace(/s$/, '') : unit}`
+}
+
 export function membershipEndDate(start: ISODate, value: number, unit: DurationUnit): ISODate {
   const exclusiveEnd = unit === 'months' ? addMonths(start, value) : addDays(start, value)
   return addDays(exclusiveEnd, -1)
@@ -190,22 +195,21 @@ function tzOffsetMinutes(at: Date, timezone: string): number {
 }
 
 const longDate = new Map<string, Intl.DateTimeFormat>()
+const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+
 export function formatDate(date: ISODate | undefined | null, style: 'short' | 'long' = 'short'): string {
   if (!date || !isISODate(date)) return '—'
   const key = style
   let f = longDate.get(key)
   if (!f) {
-    f = new Intl.DateTimeFormat('en-IN', {
-      timeZone: 'UTC',
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric',
-      ...(style === 'long' ? { weekday: 'short' } : {}),
-    })
+    f = new Intl.DateTimeFormat('en-IN', { timeZone: 'UTC', day: 'numeric', month: 'short', year: 'numeric' })
     longDate.set(key, f)
   }
   const { y, m, d } = partsOf(date)
-  return f.format(new Date(Date.UTC(y, m - 1, d)))
+  const when = new Date(Date.UTC(y, m - 1, d))
+  const short = f.format(when)
+  // 'long' adds the weekday in front and keeps the same "8 Nov 2026" tail as everywhere else.
+  return style === 'long' ? `${WEEKDAYS[when.getUTCDay()]}, ${short}` : short
 }
 
 export function formatDateTime(instant: ISODateTime | undefined | null, timezone: string): string {

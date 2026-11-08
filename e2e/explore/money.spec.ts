@@ -221,7 +221,7 @@ test.describe('1. plans', () => {
     await page.goto(memberUrl + '?tab=memberships')
     await expect(page.getByRole('main')).toContainText('Monthly')
     await expect(page.getByRole('main')).not.toContainText('Monthly Plus')
-    await expect(page.getByRole('main')).toContainText('1 months · ₹1,500.00')
+    await expect(page.getByRole('main')).toContainText('1 month · ₹1,500.00')
 
     // Archive Weekly, then it is gone from the sell dialog but the edited plan is present with new label.
     await page.goto('/plans')

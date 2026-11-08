@@ -56,7 +56,12 @@ export class FakeDrive {
   corruptNextUpload = false
   log: { method: string; path: string; account?: string }[] = []
   private seq = 0
-  private clock = Date.parse('2026-11-06T10:00:00.000Z')
+  /**
+   * Drive's clock for modifiedTime. It starts a minute ago in real time, not on a fixed date, because the
+   * app judges "backup more than a day old" against the real clock: a fixed date made every test fail
+   * once a day had passed since it was written.
+   */
+  private clock = Date.now() - 60_000
 
   addAccount(token: string, account: Partial<FakeAccount> & { id: string; email: string }): FakeAccount {
     const full: FakeAccount = { name: account.email.split('@')[0], limit: 15 * 1024 ** 3, usedElsewhere: 0, ...account }

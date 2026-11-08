@@ -124,7 +124,7 @@ export function MemberPicker({ rows, value, onChange, placeholder = 'Search by n
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => choose(r.member)}
                 onMouseEnter={() => setActive(i)}
-                className={cn('flex cursor-pointer items-center gap-3 px-3 py-2', i === active && 'bg-sunken')}
+                className={cn('flex cursor-pointer items-center gap-3 px-3 py-2', i === active && 'bg-ink/5')}
               >
                 <Avatar name={r.member.name} src={r.member.photoDataUrl} size="sm" />
                 <span className="min-w-0 flex-1">
