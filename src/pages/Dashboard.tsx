@@ -52,14 +52,14 @@ export function Dashboard() {
         <Stat to="/members?filter=active" label="Active members" value={metrics.activeMembers} hint={`${metrics.totalMembers} members in total`} />
         <Stat to="/members?filter=expiring" label="Expiring in 7 days" value={metrics.expiringSoon.length} tone={metrics.expiringSoon.length ? 'warn' : undefined} hint={`${metrics.expiredRecently.length} lapsed in the last 30 days`} />
         <Stat to="/attendance" label="Attendance today" value={metrics.attendanceToday} hint={<span className="inline-flex items-center gap-1.5">{metrics.checkedInNow > 0 ? <LiveDot /> : null}{metrics.checkedInNow} in the gym now</span>} />
-        <Stat to="/members?filter=balance" label="Outstanding" value={formatINRCompact(metrics.outstandingPaise)} tone={metrics.outstandingPaise > 0 ? 'danger' : undefined} hint={`${metrics.membersWithBalance} member${metrics.membersWithBalance === 1 ? '' : 's'} owe money`} />
+        <Stat to="/payments" label="Cash this month" value={formatINRCompact(mom.received[0])} hint={`last month ${formatINRCompact(mom.received[1])}`} />
       </div>
 
       <div className="grid gap-5 lg:grid-cols-3">
         <Card className="lg:col-span-2">
           <CardHeader
             title="Money"
-            description="Cash received is what actually came in. Invoiced is what was billed. Outstanding is the gap across all time."
+            description="Cash received is what actually came in. Invoiced is what was billed."
             action={<PeriodPicker preset={preset} period={period} today={today} onChange={(p, per) => { setPreset(p); setPeriod(per) }} />}
           />
           <CardBody className="flex flex-col gap-4">

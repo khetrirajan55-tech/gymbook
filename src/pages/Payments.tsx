@@ -5,7 +5,7 @@ import { usePage, useApp } from '@/app/AppContext'
 import { useLiveQuery } from '@/hooks/useLiveQuery'
 import { useIsDesktop } from '@/hooks/useMediaQuery'
 import { groupBy, loadSnapshotWithoutVisits, SNAPSHOT_STORES_WITHOUT_VISITS } from '@/data/snapshot'
-import { memberRows, outstandingSummary, periodPreset, type Period } from '@/domain/metrics'
+import { memberRows, periodPreset, type Period } from '@/domain/metrics'
 import { invoiceBalance } from '@/domain/membership'
 import { formatINR } from '@/domain/money'
 import { formatDate, formatDateTime, instantToDateInTz } from '@/domain/dates'
@@ -28,7 +28,7 @@ type Tab = 'payments' | 'invoices'
 const PAGE_SIZE = 25
 
 export function PaymentsPage() {
-  usePage('Payments & invoices', 'Record received payments and review invoices and balances')
+  usePage('Payments & invoices', 'Record received payments and review invoices')
   const { today, timezone } = useApp()
   const isDesktop = useIsDesktop()
   const [params, setParams] = useSearchParams()
@@ -90,7 +90,6 @@ export function PaymentsPage() {
       })
       .sort((a, b) => (a.inv.number < b.inv.number ? 1 : -1))
   }, [snap.data, invoiceFilter])
-  const outstanding = useMemo(() => (snap.data ? outstandingSummary(snap.data, today) : { totalPaise: 0, members: 0 }), [snap.data, today])
 
   const list = tab === 'payments' ? payments : invoices
   const { slice, pageCount, page: safePage } = paginate(list as unknown[], page, PAGE_SIZE)
@@ -118,9 +117,8 @@ export function PaymentsPage() {
         </CardBody>
       </Card>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid gap-3 sm:grid-cols-2">
         <Stat label={`Received · ${preset === 'custom' ? 'custom range' : preset === 'month' ? 'this month' : preset === 'year' ? 'this year' : `last ${preset.replace('d', ' days')}`}`} value={formatINR(paymentsTotal)} hint={`${payments.filter((p) => p.status === 'recorded').length} recorded payment${payments.filter((p) => p.status === 'recorded').length === 1 ? '' : 's'}`} />
-        <Stat label="Outstanding (all time)" value={formatINR(outstanding.totalPaise)} tone={outstanding.totalPaise > 0 ? 'danger' : undefined} hint={`${outstanding.members} member${outstanding.members === 1 ? '' : 's'} owe money · credits applied`} />
       </div>
 
       <Tabs value={tab} onChange={setTab} items={[{ value: 'payments', label: 'Payments' }, { value: 'invoices', label: 'Invoices' }]} />

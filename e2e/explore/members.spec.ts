@@ -629,7 +629,7 @@ test.describe('5. list with 45 members', () => {
 
     await page.goto('/members')
     const pager = page.getByRole('navigation', { name: 'Pagination' })
-    const tabs = ['All', 'Active', 'Expiring', 'Expired', 'No plan', 'Owing', 'Archived'] as const
+    const tabs = ['All', 'Active', 'Expiring', 'Expired', 'No plan', 'Archived'] as const
     const mismatches: string[] = []
     for (const label of tabs) {
       const tab = page.getByRole('tab', { name: new RegExp(`^${label}`) })
@@ -637,7 +637,7 @@ test.describe('5. list with 45 members', () => {
       await tab.click()
       await expect(tab).toHaveAttribute('aria-selected', 'true')
       if (label === 'All') await expect(page).not.toHaveURL(/filter=/)
-      else await expect(page).toHaveURL(new RegExp(`filter=${encodeURIComponent(label === 'No plan' ? 'none' : label === 'Owing' ? 'balance' : label.toLowerCase())}`))
+      else await expect(page).toHaveURL(new RegExp(`filter=${encodeURIComponent(label === 'No plan' ? 'none' : label.toLowerCase())}`))
       let listed = 0
       if (count === 0) {
         await expect(page.getByText('No members match')).toBeVisible()
@@ -649,14 +649,14 @@ test.describe('5. list with 45 members', () => {
     }
     expect(mismatches, mismatches.join('; ')).toEqual([])
     const tabCounts = Object.fromEntries(await Promise.all(tabs.map(async (l) => [l, Number((await page.getByRole('tab', { name: new RegExp(`^${l}`) }).textContent())!.replace(l, '').trim())])))
-    expect(tabCounts).toEqual({ All: 40, Active: 3, Expiring: 1, Expired: 0, 'No plan': 37, Owing: 1, Archived: 5 })
+    expect(tabCounts).toEqual({ All: 40, Active: 3, Expiring: 1, Expired: 0, 'No plan': 37, Archived: 5 })
 
     // filter persists in URL after reload
-    await page.goto('/members?filter=balance')
+    await page.goto('/members?filter=expiring')
     await page.reload()
-    await expect(page).toHaveURL(/filter=balance/)
-    await expect(page.getByRole('tab', { name: /^Owing/ })).toHaveAttribute('aria-selected', 'true')
-    await expect(page.getByRole('main').getByRole('link', { name: 'Member 02' })).toBeVisible()
+    await expect(page).toHaveURL(/filter=expiring/)
+    await expect(page.getByRole('tab', { name: /^Expiring/ })).toHaveAttribute('aria-selected', 'true')
+    await expect(page.getByRole('main').getByRole('link', { name: 'Member 03' })).toBeVisible()
     await expect(pager).toContainText('1–1 of 1')
 
     // unknown filter value does not crash
@@ -835,7 +835,6 @@ test.describe('6. archive and restore', () => {
     await expect(page.getByText('Voided: Wrong plan')).toBeVisible()
     const inv = await readStore<{ status: string; voidReason?: string }>(page, 'invoices')
     expect(inv[0]).toMatchObject({ status: 'void', voidReason: 'Wrong plan' })
-    await expect(page.getByText('Outstanding').locator('xpath=ancestor::*[contains(@class,"rounded-2xl")][1]')).toContainText('₹0.00')
   })
 
   it('detail tabs switch with ?tab= and unknown tab does not crash', async ({ page }) => {
@@ -886,7 +885,7 @@ test.describe('8. console clean on member pages', () => {
     await onboard(page, 'sample')
     const members = await readStore<MemberRec>(page, 'members')
     const m = members[0]
-    for (const route of ['/members', '/members?filter=archived', '/members?filter=balance&sort=balance&dir=desc', '/members/new', `/members/${m.id}`, `/members/${m.id}?tab=memberships`, `/members/${m.id}?tab=attendance`, `/members/${m.id}?tab=payments`, `/members/${m.id}/edit`, '/members/mem_missing']) {
+    for (const route of ['/members', '/members?filter=archived', '/members?filter=expired&sort=expiry&dir=desc', '/members/new', `/members/${m.id}`, `/members/${m.id}?tab=memberships`, `/members/${m.id}?tab=attendance`, `/members/${m.id}?tab=payments`, `/members/${m.id}/edit`, '/members/mem_missing']) {
       await page.goto(route)
       await page.waitForLoadState('networkidle')
       await expect(page).toHaveTitle(/· GymBook$/)
@@ -977,9 +976,10 @@ test.describe('9. add member with a plan', () => {
     expect(invs[0]).toMatchObject({ memberId: m.id, number: 'RK-00001', issueDate: today, totalPaise: 140000 })
     expect(pays).toHaveLength(1)
     expect(pays[0]).toMatchObject({ memberId: m.id, amountPaise: 50000, method: 'upi', status: 'recorded' })
-    // the member page shows the plan and what is still owed
+    // the member page shows the plan; what is still owed sits on the invoice in the Payments tab
     await expect(page.getByRole('main')).toContainText('Monthly')
-    await expect(page.getByRole('main')).toContainText('₹900.00')
+    await page.getByRole('tab', { name: /Payments & invoices/ }).click()
+    await expect(page.getByRole('main')).toContainText('Pay ₹900.00')
   })
 
   it('a refused sale saves nothing, keeps what was typed, and saves once corrected', async ({ page }) => {

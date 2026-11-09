@@ -791,7 +791,11 @@ test.describe('6. shell', () => {
 
     await page.keyboard.press('n')
     await expect(page).toHaveURL(/\/members\/new$/)
+    // The form focuses its first field on mount; shortcuts are for outside text fields, so step out of it first.
+    await page.getByLabel('Full name').waitFor()
+    await page.waitForTimeout(200)
     await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur())
+    await expect(page.getByLabel('Full name')).not.toBeFocused()
     await page.keyboard.press('?')
     const help = page.getByRole('dialog', { name: 'Keyboard shortcuts' })
     await expect(help).toBeVisible()

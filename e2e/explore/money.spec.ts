@@ -514,7 +514,6 @@ test.describe('4. payments, voids and adjustments', () => {
 
     // Unlinked credit from the member page changes the member balance (credit) but not the invoice.
     await page.goto(memberUrl + '?tab=payments')
-    await expect(statCard(page.getByRole('main'), 'Outstanding')).toContainText('₹0.00')
     await page.getByRole('button', { name: 'Record payment' }).first().click()
     dialog = page.getByRole('dialog')
     await expect(dialog).toContainText('No invoices with a balance')
@@ -523,7 +522,6 @@ test.describe('4. payments, voids and adjustments', () => {
     await dialog.getByRole('button', { name: 'Record payment' }).click()
     await expect(dialog).toBeHidden()
     await expect(page.getByRole('status').filter({ hasText: 'unlinked credit' })).toBeVisible()
-    await expect(statCard(page.getByRole('main'), 'Outstanding')).toContainText('₹200.00 credit')
     payments = await readStore<Payment>(page, 'payments')
     const credit = payments.find((p) => !p.invoiceId)!
     expect(credit).toMatchObject({ amountPaise: 20000, status: 'recorded' })
@@ -540,8 +538,6 @@ test.describe('4. payments, voids and adjustments', () => {
     await dialog.getByLabel('Reason').fill('Entered twice')
     await dialog.getByRole('button', { name: 'Void' }).click()
     await expect(dialog).toBeHidden()
-    await expect(statCard(page.getByRole('main'), 'Outstanding')).toContainText('₹0.00')
-    await expect(statCard(page.getByRole('main'), 'Outstanding')).toContainText('₹1,500.00 paid of ₹1,500.00')
     payments = await readStore<Payment>(page, 'payments')
     expect(payments.find((p) => p.id === credit.id)).toMatchObject({ status: 'void', voidReason: 'Entered twice', rev: 2 })
     expect(payments).toHaveLength(4)
@@ -564,14 +560,12 @@ test.describe('4. payments, voids and adjustments', () => {
       await d.getByRole('button', { name: 'Void' }).click()
       await expect(d).toBeHidden()
     }
-    await expect(statCard(page.getByRole('main'), 'Outstanding')).toContainText('₹1,500.00')
     await expect(invRow.getByRole('button', { name: 'Void' })).toBeVisible()
     await invRow.getByRole('button', { name: 'Void' }).click()
     dialog = page.getByRole('dialog')
     await dialog.getByLabel('Reason').fill('Cancelled')
     await dialog.getByRole('button', { name: 'Void' }).click()
     await expect(dialog).toBeHidden()
-    await expect(statCard(page.getByRole('main'), 'Outstanding')).toContainText('₹0.00')
     const voided = (await readStore<Invoice>(page, 'invoices'))[0]
     expect(voided).toMatchObject({ status: 'void', voidReason: 'Cancelled' })
     expect((await readStore<Payment>(page, 'payments')).every((p) => p.status === 'void')).toBe(true)
@@ -661,15 +655,11 @@ test.describe('4. payments, voids and adjustments', () => {
     expect(totals.Total).toBe(inr(inv.totalPaise + adjSum))
     expect(totals.Paid).toBe(inr(paid))
     expect(totals.Credit).toBe(inr(Math.abs(inv.totalPaise + adjSum - paid)))
-    // Member page agrees.
-    await page.getByRole('link', { name: 'Adj Person' }).click()
-    await expect(statCard(page.getByRole('main'), 'Outstanding')).toContainText('₹400.00 credit')
-    // Payments page invoice list reports the invoice as paid (balance ≤ 0) and the outstanding total excludes it.
+    // Payments page invoice list reports the invoice as paid (balance ≤ 0).
     await page.goto('/payments?tab=invoices')
     await page.getByRole('tab', { name: 'Paid' }).click()
     await expect(page.getByRole('main')).toContainText('RK-00001')
     await expect(page.getByRole('main')).toContainText('Overpaid')
-    await expect(statCard(page.getByRole('main'), 'Outstanding (all time)')).toContainText('₹0.00')
   })
 })
 
@@ -804,52 +794,6 @@ test.describe('5. payments page', () => {
   })
 })
 
-test.describe('6. outstanding agreement', () => {
-  test('dashboard, member detail and payments page agree with invoice balances minus unlinked credits', async ({ page }) => {
-    await onboard(page, 'sample')
-    const members = await readStore<Member>(page, 'members')
-    const kabir = members.find((m) => m.name.includes('Kabir'))!
-    // Kabir owes ₹500 on a ₹1,500 invoice; add a ₹200 unlinked credit.
-    await page.goto(`/members/${kabir.id}`)
-    await expect(statCard(page.getByRole('main'), 'Outstanding')).toContainText('₹500.00')
-    await page.getByRole('button', { name: 'Record payment' }).first().click()
-    const dialog = page.getByRole('dialog')
-    await dialog.getByLabel('Apply to invoice').selectOption('')
-    await dialog.getByLabel('Amount received').fill('200')
-    await dialog.getByRole('button', { name: 'Record payment' }).click()
-    await expect(dialog).toBeHidden()
-    await expect(statCard(page.getByRole('main'), 'Outstanding')).toContainText('₹300.00')
-
-    const [invoices, payments, adjustments] = await Promise.all([readStore<Invoice>(page, 'invoices'), readStore<Payment>(page, 'payments'), readStore<Adjustment>(page, 'adjustments')])
-    const perMember = (m: Member) => {
-      const due = invoices.filter((i) => i.memberId === m.id && i.status === 'issued').reduce((s, i) => s + i.totalPaise + adjustments.filter((a) => a.invoiceId === i.id).reduce((x, a) => x + a.amountPaise, 0), 0)
-      const paid = payments.filter((p) => p.memberId === m.id && p.status === 'recorded').reduce((s, p) => s + p.amountPaise, 0)
-      return due - paid
-    }
-    const live = members.filter((m) => m.status !== 'archived')
-    const expectedDashboard = live.reduce((s, m) => s + Math.max(0, perMember(m)), 0)
-    const owing = live.filter((m) => perMember(m) > 0).length
-    expect(perMember(kabir)).toBe(30000)
-
-    await page.goto('/')
-    const card = statCard(page.getByRole('main'), 'Outstanding')
-    const compact = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(expectedDashboard / 100)
-    await expect(card).toContainText(expectedDashboard % 100 === 0 ? compact : inr(expectedDashboard))
-    await expect(card).toContainText(`${owing} member${owing === 1 ? '' : 's'} owe money`)
-
-    // Members list "Owing" filter counts the same people.
-    await page.goto('/members?filter=balance')
-    await expect(page.getByRole('tab', { name: /Owing/ })).toContainText(String(owing))
-
-    // Payments and Reports pages use the same member-level definition as the dashboard (unlinked credits applied, archived excluded).
-    await page.goto('/payments')
-    const paymentsPage = await statCard(page.getByRole('main'), 'Outstanding (all time)').innerText()
-    expect(paymentsPage).toContain(inr(expectedDashboard))
-    await page.goto('/reports')
-    const reportsPage = await statCard(page.getByRole('main'), 'Outstanding (all time)').innerText()
-    expect(reportsPage).toContain(inr(expectedDashboard))
-  })
-})
 
 test.describe('7. double submit', () => {
   test('double-clicking Sell creates exactly one membership, invoice and payment', async ({ page }) => {

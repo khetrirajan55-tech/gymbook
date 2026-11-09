@@ -106,7 +106,6 @@ export function AttendancePage() {
                   ) : (
                     <span className="text-muted">No membership on record</span>
                   )}
-                  {selectedRow.balancePaise > 0 ? <Badge tone="danger">Owes money</Badge> : null}
                 </div>
                 {selectedRow.state === 'expired' || selectedRow.state === 'upcoming' || !selectedRow.current ? (
                   <p className="text-warn">No active membership today. You can <Link to={`/members/${selectedRow.member.id}`} className="font-medium underline">renew first</Link>, or allow entry with a reason that is kept on the visit record.</p>

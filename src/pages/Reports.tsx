@@ -4,7 +4,7 @@ import { PageActions } from '@/components/ui/PageActions'
 import { usePage, useApp } from '@/app/AppContext'
 import { useLiveQuery } from '@/hooks/useLiveQuery'
 import { groupBy, loadSnapshot, SNAPSHOT_STORES } from '@/data/snapshot'
-import { financeSummary, financeSeries, periodPreset, memberRows, outstandingSummary, type Period } from '@/domain/metrics'
+import { financeSummary, financeSeries, periodPreset, memberRows, type Period } from '@/domain/metrics'
 import { invoiceBalance } from '@/domain/membership'
 import { formatINR } from '@/domain/money'
 import { formatMonthKey, instantToDateInTz, formatDate, formatIsoLocal } from '@/domain/dates'
@@ -22,7 +22,7 @@ import { useToast } from '@/components/ui/Toast'
 const invoiceOrder = new Intl.Collator('en', { numeric: true })
 
 export function ReportsPage() {
-  usePage('Reports', 'Revenue, outstanding balances, attendance and renewals over a period, with CSV export')
+  usePage('Reports', 'Revenue, attendance and renewals over a period, with CSV export')
   const { today, timezone, settings } = useApp()
   const toast = useToast()
   const snap = useLiveQuery(loadSnapshot, [...SNAPSHOT_STORES])
@@ -31,7 +31,6 @@ export function ReportsPage() {
 
   const finance = useMemo(() => (snap.data ? financeSummary(snap.data, period, timezone) : null), [snap.data, period, timezone])
   const series = useMemo(() => (snap.data ? financeSeries(snap.data, period, timezone) : null), [snap.data, period, timezone])
-  const outstanding = useMemo(() => (snap.data ? outstandingSummary(snap.data, today) : { totalPaise: 0, members: 0 }), [snap.data, today])
   const renewals = useMemo(() => series?.points.reduce((s, p) => s + p.renewals, 0) ?? 0, [series])
   const newMemberships = useMemo(() => series?.points.reduce((s, p) => s + p.newMemberships, 0) ?? 0, [series])
   const attendanceTotal = useMemo(() => series?.points.reduce((s, p) => s + p.attendance, 0) ?? 0, [series])
@@ -108,15 +107,14 @@ export function ReportsPage() {
         <p className="text-sm text-muted">{formatDate(period.start)} – {formatDate(period.end)} · {settings.timezone}</p>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 [&>:last-child]:col-span-2 md:[&>:last-child]:col-span-1">
+      <div className="grid grid-cols-2 gap-3">
         <Stat label="Revenue received" value={formatINR(finance.receivedPaise)} hint={`${finance.paymentsCount} payment${finance.paymentsCount === 1 ? '' : 's'}`} />
         <Stat label="Invoiced" value={formatINR(finance.invoicedPaise)} hint={`${finance.invoicesCount} invoice${finance.invoicesCount === 1 ? '' : 's'} issued`} />
-        <Stat label="Outstanding (all time)" value={formatINR(outstanding.totalPaise)} hint={`${outstanding.members} member${outstanding.members === 1 ? '' : 's'} owe money`} tone={outstanding.totalPaise > 0 ? 'danger' : undefined} />
       </div>
 
       <Card>
         <CardBody className="flex flex-col gap-1.5 text-sm text-muted">
-          <p className="flex items-start gap-1.5"><Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden /><span><strong className="text-ink">Revenue received</strong> counts recorded, non-void payments by the date they were received. <strong className="text-ink">Invoiced</strong> counts issued, non-void invoices by issue date; it is not income until paid. <strong className="text-ink">Outstanding</strong> is what active members still owe across all time: their invoices and adjustments minus every payment, including unlinked credits.</span></p>
+          <p className="flex items-start gap-1.5"><Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden /><span><strong className="text-ink">Revenue received</strong> counts recorded, non-void payments by the date they were received. <strong className="text-ink">Invoiced</strong> counts issued, non-void invoices by issue date; it is not income until paid.</span></p>
         </CardBody>
       </Card>
 

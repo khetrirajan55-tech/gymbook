@@ -261,13 +261,6 @@ test.describe('dashboard and reports derive from records', () => {
     const dateOf = (iso: string) => new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(iso))
     const received = payments.filter((p) => p.status === 'recorded' && dateOf(p.receivedAt) >= start && dateOf(p.receivedAt) <= today).reduce((s, p) => s + p.amountPaise, 0)
     const invoiced = invoices.filter((i) => i.status === 'issued' && i.issueDate >= start && i.issueDate <= today).reduce((s, i) => s + i.totalPaise, 0)
-    const outstanding = members
-      .filter((m) => m.status !== 'archived')
-      .reduce((s, m) => {
-        const due = invoices.filter((i) => i.memberId === m.id && i.status === 'issued').reduce((x, i) => x + i.totalPaise + adjustments.filter((a) => a.invoiceId === i.id).reduce((y, a) => y + a.amountPaise, 0), 0)
-        const paid = payments.filter((p) => p.memberId === m.id && p.status === 'recorded').reduce((x, p) => x + p.amountPaise, 0)
-        return s + Math.max(0, due - paid)
-      }, 0)
     const active = members.filter((m) => m.status !== 'archived' && memberships.some((ms) => ms.memberId === m.id && ms.startDate <= today && today <= ms.endDate)).length
     const visitsToday = attendance.filter((a) => dateOf(a.checkInAt) === today).length
 
@@ -275,8 +268,6 @@ test.describe('dashboard and reports derive from records', () => {
     await expect(main).toContainText(inr(received))
     await expect(main).toContainText(inr(invoiced))
     await expect(main).not.toContainText(/Expenses|Net cash/)
-    const compact = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(outstanding / 100)
-    await expect(main).toContainText(outstanding % 100 === 0 ? compact : inr(outstanding))
     await expect(main.getByText('Active members', { exact: true }).first().locator('xpath=ancestor::*[contains(@class,"rounded-2xl")][1]')).toContainText(String(active))
     await expect(main.getByText('Attendance today', { exact: true }).first().locator('xpath=ancestor::*[contains(@class,"rounded-2xl")][1]')).toContainText(String(visitsToday))
   })

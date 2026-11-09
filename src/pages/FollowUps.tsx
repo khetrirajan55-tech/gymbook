@@ -9,7 +9,6 @@ import { followUpForm, type FollowUpFormValues } from '@/domain/validation'
 import { useForm } from '@/lib/forms'
 import { FOLLOWUP_TYPES, labelFor, type FollowUp, type FollowUpType, type Member } from '@/domain/types'
 import { formatDate, addDays, diffDays, compareDates, isISODate, instantToDateInTz } from '@/domain/dates'
-import { formatINR } from '@/domain/money'
 import { memberRows, upcomingExpiries } from '@/domain/metrics'
 import { Card, CardHeader } from '@/components/ui/Card'
 import { PageActions } from '@/components/ui/PageActions'
@@ -35,7 +34,7 @@ type ExpiryWindow = (typeof EXPIRY_WINDOWS)[number]
 const EXPIRY_PREVIEW = 6
 
 export function FollowUpsPage() {
-  usePage('Follow-ups', 'Expiry reminders, outstanding payments and leads to contact')
+  usePage('Follow-ups', 'Expiry reminders and leads to contact')
   const { today, settings, timezone } = useApp()
   const toast = useToast()
   const snap = useLiveQuery(loadSnapshotWithoutVisits, [...SNAPSHOT_STORES_WITHOUT_VISITS])
@@ -61,14 +60,13 @@ export function FollowUpsPage() {
 
   const expiries = useMemo(() => (snap.data ? upcomingExpiries(snap.data, today, Number(expiryWindow)) : []), [snap.data, today, expiryWindow])
 
-  // Suggestions: recently lapsed members and members owing money without an open follow-up of that type.
+  // Suggestions: recently lapsed members without an open expiry follow-up.
   // Memberships that have not ended yet are listed under Upcoming expiries instead.
   const suggestions = useMemo(() => {
     const open = (snap.data?.followups ?? []).filter((f) => f.status === 'open')
     const has = (memberId: string, type: FollowUpType) => open.some((f) => f.memberId === memberId && f.type === type)
     const expiry = rows.filter((r) => r.state === 'expired' && r.current && diffDays(r.current.endDate, today) <= 14 && !has(r.member.id, 'expiry'))
-    const payment = rows.filter((r) => r.balancePaise > 0 && !has(r.member.id, 'payment'))
-    return { expiry, payment }
+    return { expiry }
   }, [rows, snap.data, today])
 
   if (snap.error) return <ErrorState message={snap.error} />
@@ -161,22 +159,15 @@ export function FollowUpsPage() {
         </Card>
       ) : null}
 
-      {tab === 'open' && (suggestions.expiry.length > 0 || suggestions.payment.length > 0) ? (
+      {tab === 'open' && suggestions.expiry.length > 0 ? (
         <Card>
-          <CardHeader title="Suggested" description="Members who may need a call, based on lapsed plans and balances. Nothing is created until you add it." />
+          <CardHeader title="Suggested" description="Members whose plan lapsed recently. Nothing is created until you add it." />
           <ul className="divide-y divide-line">
             {suggestions.expiry.slice(0, 5).map((r) => (
               <li key={'e' + r.member.id} className="flex items-center gap-3 px-4 py-2.5 sm:px-5">
                 <Badge tone="warn">Expiry</Badge>
                 <span className="flex min-w-0 flex-1 flex-col text-sm sm:flex-row sm:items-baseline sm:gap-1"><Link to={`/members/${r.member.id}`} className="truncate font-medium hover:underline">{r.member.name}</Link>{' '}<span className="truncate text-muted"><span className="hidden sm:inline">· </span>{r.current?.planName} ended {formatDate(r.current?.endDate)}</span></span>
                 <Button size="sm" variant="secondary" onClick={() => setEditing({ prefill: { type: 'expiry', memberId: r.member.id, dueDate: today, note: `${r.current?.planName} ended ${formatDate(r.current?.endDate)}; offer renewal` } })}>Add</Button>
-              </li>
-            ))}
-            {suggestions.payment.slice(0, 5).map((r) => (
-              <li key={'p' + r.member.id} className="flex items-center gap-3 px-4 py-2.5 sm:px-5">
-                <Badge tone="danger">Payment</Badge>
-                <span className="flex min-w-0 flex-1 flex-col text-sm sm:flex-row sm:items-baseline sm:gap-1"><Link to={`/members/${r.member.id}?tab=payments`} className="truncate font-medium hover:underline">{r.member.name}</Link>{' '}<span className="shrink-0 text-muted"><span className="hidden sm:inline">· </span>owes {formatINR(r.balancePaise)}</span></span>
-                <Button size="sm" variant="secondary" onClick={() => setEditing({ prefill: { type: 'payment', memberId: r.member.id, dueDate: today, note: `Collect outstanding ${formatINR(r.balancePaise)}` } })}>Add</Button>
               </li>
             ))}
           </ul>

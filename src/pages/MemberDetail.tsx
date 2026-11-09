@@ -194,10 +194,9 @@ export function MemberDetailPage() {
 
       {archived ? <Banner tone="warn">This member is archived. Their memberships, payments and invoices are kept for records. Restore them to sell memberships or check in again.</Banner> : null}
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         <Stat label="Current plan" value={data.current ? data.current.planName : '—'} hint={data.current ? (data.state === 'upcoming' ? `Starts ${formatDate(data.current.startDate)}` : `${data.state === 'expired' ? 'Ended' : 'Ends'} ${formatDate(data.current.endDate)}`) : 'No membership yet'} />
         <Stat label="Days left" value={data.current && data.coverEnd && data.state !== 'expired' && data.state !== 'upcoming' ? diffDays(today, data.coverEnd) : '—'} tone={data.state === 'expiring' ? 'warn' : undefined} hint={data.current && data.coverEnd && data.state !== 'expired' && data.state !== 'upcoming' && compareDates(data.coverEnd, data.current.endDate) > 0 ? `Renewed to ${formatDate(data.coverEnd)}` : undefined} />
-        <Stat label="Outstanding" value={formatINR(Math.max(0, data.balance.balancePaise))} tone={data.balance.balancePaise > 0 ? 'danger' : undefined} hint={data.balance.balancePaise < 0 ? `${formatINR(-data.balance.balancePaise)} credit` : `${formatINR(data.balance.paidPaise)} paid of ${formatINR(data.balance.invoicedPaise)}`} />
         <Stat label="Visits" value={data.attendance.length} hint={data.attendance[0] ? `Last ${formatDateTime(data.attendance[0].checkInAt, timezone)}` : 'No visits recorded'} />
       </div>
 

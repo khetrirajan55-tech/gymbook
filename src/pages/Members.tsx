@@ -6,7 +6,6 @@ import { useLiveQuery } from '@/hooks/useLiveQuery'
 import { loadSnapshot, SNAPSHOT_STORES } from '@/data/snapshot'
 import { memberRows, type MemberRow } from '@/domain/metrics'
 import { formatDate, compareDates, diffDays } from '@/domain/dates'
-import { formatINR } from '@/domain/money'
 import { cn } from '@/lib/cn'
 import { Card } from '@/components/ui/Card'
 import { LinkButton } from '@/components/ui/Button'
@@ -19,8 +18,8 @@ import { MembershipStateBadge } from '@/components/domain/MembershipBadge'
 import { SampleBadge, Badge } from '@/components/ui/Badge'
 import { filterMembers } from '@/components/domain/MemberPicker'
 
-type Filter = 'all' | 'active' | 'expiring' | 'expired' | 'none' | 'balance' | 'archived'
-type SortKey = 'name' | 'joined' | 'expiry' | 'balance' | 'lastVisit'
+type Filter = 'all' | 'active' | 'expiring' | 'expired' | 'none' | 'archived'
+type SortKey = 'name' | 'joined' | 'expiry' | 'lastVisit'
 const PAGE_SIZE = 20
 // A collator sorts a thousand names in a few milliseconds; String.localeCompare took tens of times longer.
 const byName = new Intl.Collator('en', { sensitivity: 'base', numeric: true })
@@ -74,7 +73,6 @@ export function MembersPage() {
       expiring: live.filter((r) => r.state === 'expiring').length,
       expired: live.filter((r) => r.state === 'expired').length,
       none: live.filter((r) => !r.current).length,
-      balance: live.filter((r) => r.balancePaise > 0).length,
       archived: rows.filter((r) => r.member.status === 'archived').length,
     }
   }, [rows])
@@ -88,7 +86,6 @@ export function MembersPage() {
       if (filter === 'expiring') list = list.filter((r) => r.state === 'expiring')
       if (filter === 'expired') list = list.filter((r) => r.state === 'expired')
       if (filter === 'none') list = list.filter((r) => !r.current)
-      if (filter === 'balance') list = list.filter((r) => r.balancePaise > 0)
     }
     list = filterMembers(list, qLocal)
     const cmp = (a: MemberRow, b: MemberRow): number => {
@@ -97,8 +94,6 @@ export function MembersPage() {
           return compareDates(a.member.joiningDate, b.member.joiningDate)
         case 'expiry':
           return cmpStr(a.current?.endDate, b.current?.endDate)
-        case 'balance':
-          return a.balancePaise - b.balancePaise
         case 'lastVisit':
           return cmpStr(a.lastVisitAt, b.lastVisitAt)
         default:
@@ -126,7 +121,6 @@ export function MembersPage() {
             <option value="joined:desc">Newest first</option>
             <option value="joined:asc">Oldest first</option>
             <option value="expiry:asc">Expiry soonest</option>
-            <option value="balance:desc">Highest balance</option>
             <option value="lastVisit:desc">Recent visit</option>
           </Select>
         </div>
@@ -140,7 +134,6 @@ export function MembersPage() {
           { value: 'expiring', label: 'Expiring', count: counts.expiring },
           { value: 'expired', label: 'Expired', count: counts.expired },
           { value: 'none', label: 'No plan', count: counts.none },
-          { value: 'balance', label: 'Owing', count: counts.balance },
           { value: 'archived', label: 'Archived', count: counts.archived },
         ]}
       />
@@ -183,7 +176,6 @@ function MemberCard({ row: r, today }: { row: MemberRow; today: string }) {
         : daysLeft === 0
           ? `${r.current.planName} · ends today`
           : `${r.current.planName} · ${daysLeft} day${daysLeft === 1 ? '' : 's'} left`
-  const balanceCls = r.balancePaise > 0 ? 'font-medium text-danger' : r.balancePaise < 0 ? 'text-info' : 'text-muted'
   return (
     <li className={cn('surface-card pressable relative flex min-w-0 flex-col rounded-2xl p-4 hover:border-line-strong focus-within:border-line-strong', archived && 'opacity-80')}>
       <div className="flex items-start gap-3">
@@ -204,11 +196,7 @@ function MemberCard({ row: r, today }: { row: MemberRow; today: string }) {
         <MembershipStateBadge state={r.state} />
       </div>
       <p className={cn('mt-3 text-sm', r.current ? 'text-ink' : 'text-muted')}>{planLine}</p>
-      <dl className="mt-3 grid grid-cols-3 gap-2 border-t border-line pt-3">
-        <div className="min-w-0">
-          <dt className="text-xs text-muted">Balance</dt>
-          <dd className={cn('tabular mt-0.5 truncate text-sm', balanceCls)}>{r.balancePaise === 0 ? '—' : formatINR(r.balancePaise)}</dd>
-        </div>
+      <dl className="mt-3 grid grid-cols-2 gap-2 border-t border-line pt-3">
         <div className="min-w-0">
           <dt className="text-xs text-muted">Plan expiry</dt>
           <dd className={cn('mt-0.5 truncate text-sm', r.state === 'expired' ? 'text-danger' : r.state === 'expiring' ? 'text-warn' : undefined)}>{r.current ? formatDate(r.current.endDate) : '—'}</dd>

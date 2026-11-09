@@ -644,45 +644,38 @@ test.describe('follow-ups', () => {
     type M = { id: string; name: string; phone: string; status: string }
     const members = await readStore<M>(page, 'members')
     const memberships = await readStore<{ memberId: string; startDate: string; endDate: string }>(page, 'memberships')
-    const invoices = await readStore<{ id: string; memberId: string; status: string; totalPaise: number }>(page, 'invoices')
-    const payments = await readStore<{ memberId: string; status: string; amountPaise: number }>(page, 'payments')
-    const openFus = (await readStore<FU>(page, 'followups')).filter((f) => f.status === 'open')
-    const balance = (m: M) => invoices.filter((i) => i.memberId === m.id && i.status === 'issued').reduce((s, i) => s + i.totalPaise, 0) - payments.filter((p) => p.memberId === m.id && p.status === 'recorded').reduce((s, p) => s + p.amountPaise, 0)
-    const owing = members.filter((m) => m.status !== 'archived' && balance(m) > 0 && !openFus.some((f) => f.memberId === m.id && f.type === 'payment'))
-    expect(owing.length).toBeGreaterThan(0)
 
     await page.goto('/follow-ups')
     const suggested = page.getByRole('heading', { name: 'Suggested' }).locator('xpath=ancestor::*[contains(@class,"rounded-2xl")][1]')
     await expect(suggested).toBeVisible()
-    for (const m of owing) {
-      const li = suggested.getByRole('listitem').filter({ hasText: m.name }).filter({ hasText: 'Payment' })
-      await expect(li).toContainText(`owes ${inr(balance(m))}`)
-    }
+    // Balances are not chased from here any more: no "Payment" suggestions, only lapsed plans.
+    await expect(suggested.getByRole('listitem').filter({ hasText: 'Payment' })).toHaveCount(0)
     // an expiring member (Diya) already has an open expiry follow-up so must not be suggested; Vihaan's trial ended within 14 days → suggested
     const vihaan = members.find((m) => m.name.includes('Vihaan'))!
     const vMs = memberships.find((ms) => ms.memberId === vihaan.id)!
     await expect(suggested.getByRole('listitem').filter({ hasText: 'Vihaan' })).toContainText(`10-day trial ended ${formatDate(vMs.endDate)}`)
     await expect(suggested.getByRole('listitem').filter({ hasText: 'Diya' })).toHaveCount(0)
 
-    // add a prefilled payment follow-up for the first owing member
-    const target = owing[0]
-    const li = suggested.getByRole('listitem').filter({ hasText: target.name }).filter({ hasText: 'Payment' })
-    await li.getByRole('button', { name: 'Add' }).click()
+    // add a prefilled expiry follow-up from the suggestion
+    const vLi = suggested.getByRole('listitem').filter({ hasText: 'Vihaan' })
+    await vLi.getByRole('button', { name: 'Add' }).click()
     const d = page.getByRole('dialog')
-    await expect(d.getByLabel(/^Type/)).toHaveValue('payment')
-    await expect(d.getByText(target.name, { exact: true })).toBeVisible()
+    await expect(d.getByLabel(/^Type/)).toHaveValue('expiry')
+    await expect(d.getByText(vihaan.name, { exact: true })).toBeVisible()
     await expect(d.getByLabel(/^Due date/)).toHaveValue(t)
-    await expect(d.getByLabel(/^Note/)).toHaveValue(`Collect outstanding ${inr(balance(target))}`)
+    await expect(d.getByLabel(/^Note/)).toHaveValue(`10-day trial ended ${formatDate(vMs.endDate)}; offer renewal`)
     await d.getByRole('button', { name: 'Add follow-up' }).click()
     await expect(d).toBeHidden()
-    const created = (await readStore<FU>(page, 'followups')).find((f) => f.memberId === target.id && f.type === 'payment')!
-    expect(created).toMatchObject({ status: 'open', dueDate: t, note: `Collect outstanding ${inr(balance(target))}` })
+    const created = (await readStore<FU>(page, 'followups')).find((f) => f.memberId === vihaan.id && f.type === 'expiry')!
+    expect(created).toMatchObject({ status: 'open', dueDate: t })
     // suggestion disappears once a follow-up exists
-    await expect(li).toHaveCount(0)
+    await expect(vLi).toHaveCount(0)
 
-    // contact hrefs
+    // contact hrefs, on the sample payment follow-up for Kabir
+    const target = members.find((m) => m.name.includes('Kabir'))!
     const todo = page.getByRole('heading', { name: 'To do' }).locator('xpath=ancestor::*[contains(@class,"rounded-2xl")][1]')
-    const row = todo.getByRole('listitem').filter({ hasText: target.name }).filter({ hasText: 'Collect outstanding' })
+    const row = todo.getByRole('listitem').filter({ hasText: target.name }).filter({ hasText: 'Collect remaining' })
+    const kabirNote = (await readStore<FU>(page, 'followups')).find((f) => f.memberId === target.id && f.type === 'payment')!.note
     const digits = target.phone.replace(/\D/g, '')
     expect(digits).toHaveLength(10)
     await expect(row.getByRole('link', { name: 'Call' })).toHaveAttribute('href', `tel:${digits}`)
@@ -690,7 +683,7 @@ test.describe('follow-ups', () => {
     const waUrl = new URL(wa!)
     expect(waUrl.origin + waUrl.pathname).toBe('https://api.whatsapp.com/send')
     expect(waUrl.searchParams.get('phone')).toBe(`91${digits}`)
-    expect(waUrl.searchParams.get('text')).toBe(`Hi ${target.name.replace(/^Sample\s+/, '')}, this is Test Gym. Collect outstanding ${inr(balance(target))}`)
+    expect(waUrl.searchParams.get('text')).toBe(`Hi ${target.name.replace(/^Sample\s+/, '')}, this is Test Gym. ${kabirNote}`)
     await expect(row.getByRole('link', { name: 'WhatsApp' })).toHaveAttribute('target', '_blank')
     await expect(row.getByRole('link', { name: 'WhatsApp' })).toHaveAttribute('rel', /noopener/)
     // Members no longer carry an email address, so a member row never offers an Email link.
@@ -745,13 +738,6 @@ test.describe('reports', () => {
     const received = recv.reduce((s, p) => s + p.amountPaise, 0)
     const inv = invoices.filter((i) => i.status === 'issued' && inP(i.issueDate))
     const invoiced = inv.reduce((s, i) => s + i.totalPaise, 0)
-    const balances = invoices.map((i) => {
-      const adj = adjustments.filter((a) => a.invoiceId === i.id).reduce((s, a) => s + a.amountPaise, 0)
-      const due = i.status === 'void' ? 0 : i.totalPaise + adj
-      const paid = payments.filter((p) => p.invoiceId === i.id && p.status === 'recorded').reduce((s, p) => s + p.amountPaise, 0)
-      return due - paid
-    }).filter((b) => b > 0)
-    const outstanding = balances.reduce((s, b) => s + b, 0)
     const visits = attendance.filter((a) => inP(dateOf(a.checkInAt)))
     const unique = new Set(visits.map((a) => a.memberId)).size
     const newMs = memberships.filter((m) => !m.renewalOfId && inP(dateOf(m.createdAt))).length
@@ -764,8 +750,6 @@ test.describe('reports', () => {
     await expect(statCard(page, 'Revenue received')).toContainText(`${recv.length} payment${recv.length === 1 ? '' : 's'}`)
     await expect(statCard(page, 'Invoiced')).toContainText(inr(invoiced))
     await expect(statCard(page, 'Invoiced')).toContainText(`${inv.length} invoice${inv.length === 1 ? '' : 's'} issued`)
-    await expect(statCard(page, 'Outstanding (all time)')).toContainText(inr(outstanding))
-    await expect(statCard(page, 'Outstanding (all time)')).toContainText(/\d+ members? owe money/)
     await expect(page.getByRole('main')).not.toContainText(/Expenses|Net cash/)
     await expect(page.getByText(`${visits.length} visits by ${unique} member${unique === 1 ? '' : 's'} · ${newMs} new · ${renewals} renewal${renewals === 1 ? '' : 's'}`)).toBeVisible()
     // received by method list
@@ -779,7 +763,6 @@ test.describe('reports', () => {
     const s7 = addDays(t, -6)
     const recv7 = payments.filter((p) => p.status === 'recorded' && dateOf(p.receivedAt) >= s7 && dateOf(p.receivedAt) <= t).reduce((s, p) => s + p.amountPaise, 0)
     await expect(statCard(page, 'Revenue received')).toContainText(inr(recv7))
-    await expect(statCard(page, 'Outstanding (all time)')).toContainText(inr(outstanding))
 
     // custom period with start > end
     await page.getByRole('tab', { name: 'Custom' }).click()
