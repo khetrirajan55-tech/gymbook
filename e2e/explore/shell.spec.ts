@@ -791,6 +791,7 @@ test.describe('6. shell', () => {
 
     await page.keyboard.press('n')
     await expect(page).toHaveURL(/\/members\/new$/)
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur())
     await page.keyboard.press('?')
     const help = page.getByRole('dialog', { name: 'Keyboard shortcuts' })
     await expect(help).toBeVisible()

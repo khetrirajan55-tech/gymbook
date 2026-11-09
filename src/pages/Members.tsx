@@ -22,6 +22,9 @@ import { filterMembers } from '@/components/domain/MemberPicker'
 type Filter = 'all' | 'active' | 'expiring' | 'expired' | 'none' | 'balance' | 'archived'
 type SortKey = 'name' | 'joined' | 'expiry' | 'balance' | 'lastVisit'
 const PAGE_SIZE = 20
+// A collator sorts a thousand names in a few milliseconds; String.localeCompare took tens of times longer.
+const byName = new Intl.Collator('en', { sensitivity: 'base', numeric: true })
+const cmpStr = (a: string | undefined, b: string | undefined) => (a === b ? 0 : (a ?? '') < (b ?? '') ? -1 : 1)
 
 export function MembersPage() {
   usePage('Members', 'Search, filter and manage gym members')
@@ -31,11 +34,11 @@ export function MembersPage() {
   const filter = (params.get('filter') as Filter) || 'all'
   const sort = (params.get('sort') as SortKey) || 'name'
   const dir = params.get('dir') === 'desc' ? 'desc' : 'asc'
-  const page = Number(params.get('page') ?? '1') || 1
   const snap = useLiveQuery(loadSnapshot, [...SNAPSHOT_STORES])
 
   const update = (patch: Record<string, string | null>) => {
-    const next = new URLSearchParams(params)
+    // Start from the address bar, not the router's copy: the search box writes q there directly (see `search`).
+    const next = new URLSearchParams(window.location.search)
     for (const [k, v] of Object.entries(patch)) {
       if (v === null || v === '') next.delete(k)
       else next.set(k, v)
@@ -44,11 +47,23 @@ export function MembersPage() {
     setParams(next, { replace: true })
   }
 
-  // Keep the search box local so fast typing never races the URL round-trip; the URL follows after a short pause.
+  // The list follows every keystroke from local state. The address bar is kept current too (so reload and back
+  // keep the search), but with replaceState rather than a router navigation, which re-renders the whole app.
   const [qLocal, setQLocal] = useState(q)
   useEffect(() => {
     setQLocal(q)
   }, [q])
+  const search = (v: string) => {
+    setQLocal(v)
+    const next = new URLSearchParams(window.location.search)
+    if (v) next.set('q', v)
+    else next.delete('q')
+    next.delete('page')
+    const qs = next.toString()
+    window.history.replaceState(window.history.state, '', `${window.location.pathname}${qs ? `?${qs}` : ''}`)
+  }
+  // A search typed since the last router navigation starts from page 1 (the URL's page belonged to the old list).
+  const page = qLocal === q ? Number(params.get('page') ?? '1') || 1 : 1
 
   const rows = useMemo(() => (snap.data ? memberRows(snap.data, today) : []), [snap.data, today])
   const counts = useMemo(() => {
@@ -75,23 +90,23 @@ export function MembersPage() {
       if (filter === 'none') list = list.filter((r) => !r.current)
       if (filter === 'balance') list = list.filter((r) => r.balancePaise > 0)
     }
-    list = filterMembers(list, q)
+    list = filterMembers(list, qLocal)
     const cmp = (a: MemberRow, b: MemberRow): number => {
       switch (sort) {
         case 'joined':
           return compareDates(a.member.joiningDate, b.member.joiningDate)
         case 'expiry':
-          return (a.current?.endDate ?? '').localeCompare(b.current?.endDate ?? '')
+          return cmpStr(a.current?.endDate, b.current?.endDate)
         case 'balance':
           return a.balancePaise - b.balancePaise
         case 'lastVisit':
-          return (a.lastVisitAt ?? '').localeCompare(b.lastVisitAt ?? '')
+          return cmpStr(a.lastVisitAt, b.lastVisitAt)
         default:
-          return a.member.name.localeCompare(b.member.name)
+          return byName.compare(a.member.name, b.member.name)
       }
     }
     return [...list].sort((a, b) => (dir === 'asc' ? cmp(a, b) : cmp(b, a)))
-  }, [rows, filter, q, sort, dir])
+  }, [rows, filter, qLocal, sort, dir])
 
   const { slice, pageCount, page: safePage } = paginate(filtered, page, PAGE_SIZE)
 
@@ -103,7 +118,7 @@ export function MembersPage() {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <SearchInput value={qLocal} onChange={(v) => { setQLocal(v); update({ q: v }) }} placeholder="Search name or phone" className="sm:w-80" />
+        <SearchInput value={qLocal} onChange={search} placeholder="Search name or phone" className="sm:w-80" />
         <div className="flex flex-wrap items-center gap-2">
           <Select aria-label="Sort by" value={`${sort}:${dir}`} onChange={(e) => { const [s, d] = e.target.value.split(':'); update({ sort: s, dir: d }) }} className="w-full text-sm sm:w-auto">
             <option value="name:asc">Name A–Z</option>
@@ -135,7 +150,7 @@ export function MembersPage() {
         </Card>
       ) : filtered.length === 0 ? (
         <Card>
-          <EmptyState title="No members match" description={q ? `Nothing matches “${q}” in this filter.` : 'Try another filter.'} />
+          <EmptyState title="No members match" description={qLocal ? `Nothing matches “${qLocal}” in this filter.` : 'Try another filter.'} />
         </Card>
       ) : (
         <>

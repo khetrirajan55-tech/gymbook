@@ -1,13 +1,17 @@
 import { createBrowserRouter, RouterProvider, Outlet, ScrollRestoration } from 'react-router-dom'
-import { lazy, Suspense, useState, useMemo } from 'react'
-const MembersPage = lazy(() => import('@/pages/Members').then((m) => ({ default: m.MembersPage })))
-const MemberDetailPage = lazy(() => import('@/pages/MemberDetail').then((m) => ({ default: m.MemberDetailPage })))
-const MemberFormPage = lazy(() => import('@/pages/MemberForm').then((m) => ({ default: m.MemberFormPage })))
+import { lazy, Suspense, useEffect, useState, useMemo } from 'react'
+import { loadSnapshot } from '@/data/snapshot'
+// The front-desk pages ship in the main bundle: a lazily loaded page cost about half a second extra on
+// a phone before it could show anything, which is most of what the desk opens all day. Rarely used
+// pages (plans, reports, settings, printing) still load on demand.
+import { MembersPage } from '@/pages/Members'
+import { MemberDetailPage } from '@/pages/MemberDetail'
+import { MemberFormPage } from '@/pages/MemberForm'
+import { AttendancePage } from '@/pages/Attendance'
+import { PaymentsPage } from '@/pages/Payments'
+import { FollowUpsPage } from '@/pages/FollowUps'
 const PlansPage = lazy(() => import('@/pages/Plans').then((m) => ({ default: m.PlansPage })))
-const AttendancePage = lazy(() => import('@/pages/Attendance').then((m) => ({ default: m.AttendancePage })))
-const PaymentsPage = lazy(() => import('@/pages/Payments').then((m) => ({ default: m.PaymentsPage })))
 const InvoicePage = lazy(() => import('@/pages/Invoice').then((m) => ({ default: m.InvoicePage })))
-const FollowUpsPage = lazy(() => import('@/pages/FollowUps').then((m) => ({ default: m.FollowUpsPage })))
 const ReportsPage = lazy(() => import('@/pages/Reports').then((m) => ({ default: m.ReportsPage })))
 const SettingsPage = lazy(() => import('@/pages/Settings').then((m) => ({ default: m.SettingsPage })))
 const WorkoutsPage = lazy(() => import('@/pages/Workouts').then((m) => ({ default: m.WorkoutsPage })))
@@ -40,7 +44,13 @@ function Root() {
 
 function Gate() {
   const { settings } = useApp()
-  if (settings.dataMode === 'unset') return <Onboarding />
+  const ready = settings.dataMode !== 'unset'
+  // Start reading the records every page needs as soon as the gym is set up, in parallel with the first
+  // page's own work, so the first tap on Members or Payments opens from memory.
+  useEffect(() => {
+    if (ready) void loadSnapshot().catch(() => {})
+  }, [ready])
+  if (!ready) return <Onboarding />
   return (
     <Suspense fallback={<PageLoading />}>
       <Outlet />

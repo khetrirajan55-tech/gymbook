@@ -7,4 +7,4 @@ export const springSheet: Transition = { type: 'spring', duration: 0.4, bounce: 
 /** Cross-fade used when the person prefers reduced motion. */
 export const fadeReduced: Transition = { duration: 0.15, ease: 'easeOut' }
 /** Page-enter transition. */
-export const pageEnter: Transition = { duration: 0.3, ease: [0.22, 1, 0.36, 1] }
+export const pageEnter: Transition = { duration: 0.18, ease: [0.22, 1, 0.36, 1] }

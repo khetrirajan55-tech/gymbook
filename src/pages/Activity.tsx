@@ -74,7 +74,7 @@ export function ActivityPage() {
         ) : (
           groups.map(([date, items]) => (
             <div key={date}>
-              <p className="sticky top-14 z-[1] border-b border-line bg-surface px-5 py-1.5 text-xs text-muted">{formatDate(date, 'long')}</p>
+              <p className="sticky top-[calc(56px+env(safe-area-inset-top))] z-[1] border-b border-line bg-surface px-5 py-1.5 text-xs text-muted">{formatDate(date, 'long')}</p>
               <ul className="divide-y divide-line">
                 {items.map((a) => {
                   const k = KINDS.find((x) => x.value === a.kind)

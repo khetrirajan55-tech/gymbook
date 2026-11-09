@@ -19,6 +19,8 @@ import { BarChart } from '@/components/charts/BarChart'
 import { PeriodPicker, type PresetName } from '@/components/domain/PeriodPicker'
 import { useToast } from '@/components/ui/Toast'
 
+const invoiceOrder = new Intl.Collator('en', { numeric: true })
+
 export function ReportsPage() {
   usePage('Reports', 'Revenue, outstanding balances, attendance and renewals over a period, with CSV export')
   const { today, timezone, settings } = useApp()
@@ -64,7 +66,7 @@ export function ReportsPage() {
           return [localStamp(p.receivedAt), m?.name ?? '', m?.phone ?? '', (p.amountPaise / 100).toFixed(2), labelFor(PAYMENT_METHODS, p.method), inv?.number ?? '', p.status, p.reference ?? '', p.note ?? '']
         }))
       } else if (what === 'invoices') {
-        const rows = snap.data!.invoices.filter((i) => inPeriod(i.issueDate)).sort((a, b) => a.number.localeCompare(b.number))
+        const rows = snap.data!.invoices.filter((i) => inPeriod(i.issueDate)).sort((a, b) => invoiceOrder.compare(a.number, b.number))
         // Group once, so a year of invoices does not search every payment for every invoice.
         const paymentsByInvoice = groupBy(snap.data!.payments, (p) => p.invoiceId)
         const adjustmentsByInvoice = groupBy(snap.data!.adjustments, (x) => x.invoiceId)

@@ -132,7 +132,8 @@
 
 /* ---- Base --------------------------------------------------------------- */
 @layer base {
-  html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+  /* The page colour reaches every edge: under the notch, behind the home bar and when the page bounces. */
+  html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; background-color: rgb(var(--c-canvas)); }
   body {
     @apply bg-canvas text-ink font-sans antialiased text-base;
     overflow-x: hidden;

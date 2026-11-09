@@ -16,7 +16,7 @@ export interface PickerMember {
 export function filterMembers<T extends { member: Member }>(rows: T[], term: string): T[] {
   const t = term.trim().toLowerCase()
   if (!t) return rows
-  const digits = t.replace(/\D/g, '')
+  const digits = normalizePhone(t)
   return rows.filter(({ member }) => {
     if (member.name.toLowerCase().includes(t)) return true
     if (member.memberCode && member.memberCode.toLowerCase().replace('-', '').includes(t.replace('-', ''))) return true

@@ -219,7 +219,7 @@ export function Shell() {
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="no-print bg-canvas sticky top-0 z-30 border-b border-line">
+        <header className="no-print bg-canvas sticky top-0 z-30 border-b border-line pt-[env(safe-area-inset-top)]">
           <div className="flex h-14 items-center gap-2 px-3 sm:px-5 lg:h-16">
             <div className="min-w-0 lg:hidden">
               <Logo name={settings.gymName} logo={settings.logoDataUrl} />
@@ -341,7 +341,7 @@ export function Shell() {
               role="dialog"
               aria-modal="true"
               aria-label="Navigation"
-              className="surface-pop fixed inset-y-0 left-0 z-50 flex w-72 max-w-[85vw] flex-col overflow-y-auto rounded-r-2xl px-3 py-3 pb-safe lg:hidden"
+              className="surface-pop fixed inset-y-0 left-0 z-50 flex w-72 max-w-[85vw] flex-col overflow-y-auto rounded-r-2xl px-3 py-3 pt-[calc(12px+env(safe-area-inset-top))] pb-safe lg:hidden"
               initial={reduced ? { opacity: 0 } : { x: '-100%' }}
               animate={reduced ? { opacity: 1 } : { x: 0 }}
               exit={reduced ? { opacity: 0 } : { x: '-100%' }}
