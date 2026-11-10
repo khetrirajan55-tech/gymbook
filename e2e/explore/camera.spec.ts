@@ -87,6 +87,52 @@ test.describe('member photo from the camera', () => {
     expect(errors).toEqual([])
   })
 
+  test('tapping the photo on a member page: view it, change it by upload or camera, remove it', async ({ page }) => {
+    await trackStreams(page)
+    await onboard(page, 'empty')
+    await page.goto('/members/new')
+    await page.getByLabel('Full name').fill('Photo Tap')
+    await page.getByLabel(/^Phone/).fill('98200 00044')
+    await page.getByRole('button', { name: 'Add member' }).click()
+    await expect(page).toHaveURL(/\/members\/mem_/)
+    const stored = async () => (await readStore<MemberRec>(page, 'members'))[0].photoDataUrl
+
+    // No photo yet: the avatar offers to add one.
+    await page.getByRole('button', { name: 'Add a photo of Photo Tap' }).click()
+    let dialog = page.getByRole('dialog', { name: 'Photo Tap' })
+    await expect(dialog).toContainText('No photo yet')
+    await expect(dialog.getByRole('button', { name: 'Remove photo' })).toHaveCount(0)
+    // 1×1 PNG; the app turns it into the small JPEG it stores.
+    const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64')
+    await dialog.getByLabel('Upload a photo').setInputFiles({ name: 'p.png', mimeType: 'image/png', buffer: png })
+    await expect(page.getByRole('status').filter({ hasText: 'Photo updated' })).toBeVisible()
+    await expect(dialog).toBeHidden()
+    const uploaded = await stored()
+    expect(uploaded).toMatch(/^data:image\/jpeg;base64,/)
+
+    // Now it opens as a viewer with the photo at full size, and the camera replaces it.
+    await page.getByRole('button', { name: 'View or change photo of Photo Tap' }).click()
+    dialog = page.getByRole('dialog', { name: 'Photo Tap' })
+    await expect(dialog.getByRole('img', { name: 'Photo of Photo Tap' })).toBeVisible()
+    await dialog.getByRole('button', { name: 'Take photo' }).click()
+    const camera = page.getByRole('dialog', { name: 'Take photo' })
+    await expect(camera.locator('video')).toBeVisible()
+    await page.waitForFunction(() => (document.querySelector('video') as HTMLVideoElement | null)?.videoWidth)
+    await camera.getByRole('button', { name: 'Take photo' }).click()
+    await camera.getByRole('button', { name: 'Use photo' }).click()
+    await expect(page.getByRole('status').filter({ hasText: 'Photo updated' }).last()).toBeVisible()
+    await expect.poll(stored).not.toBe(uploaded)
+    expect(await stored()).toMatch(/^data:image\/jpeg;base64,/)
+    await expect.poll(() => liveTracks(page)).toEqual({ opened: true, live: 0 })
+
+    // Remove it again.
+    await page.getByRole('button', { name: 'View or change photo of Photo Tap' }).click()
+    await page.getByRole('dialog', { name: 'Photo Tap' }).getByRole('button', { name: 'Remove photo' }).click()
+    await expect(page.getByRole('status').filter({ hasText: 'Photo removed' })).toBeVisible()
+    await expect.poll(stored).toBeUndefined()
+    await expect(page.getByRole('button', { name: 'Add a photo of Photo Tap' })).toBeVisible()
+  })
+
   test('cancelling leaves the form untouched and releases the camera', async ({ page }) => {
     await trackStreams(page)
     await onboard(page, 'empty')

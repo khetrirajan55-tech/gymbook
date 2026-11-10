@@ -77,6 +77,18 @@ export async function updateMember(id: string, expectedRev: number, values: Memb
   })
 }
 
+/** Set or clear just the photo, from the member's page. The same size limit as the form applies. */
+export async function setMemberPhoto(id: string, expectedRev: number, photoDataUrl: string | undefined): Promise<Member> {
+  if (photoDataUrl !== undefined && (!photoDataUrl.startsWith('data:image/') || photoDataUrl.length > 400_000)) {
+    throw new DomainError('invalid-photo', 'Photo is too large or not an image; use a smaller image.')
+  }
+  return writeTx(['members', 'activity'], async (tx) => {
+    const next = await updateRecord(tx, 'members', id, expectedRev, (m) => ({ ...m, photoDataUrl }))
+    await logActivity(tx, { kind: 'member', message: photoDataUrl ? `Changed photo of ${next.name}` : `Removed photo of ${next.name}`, memberId: id, refType: 'member', refId: id })
+    return next
+  })
+}
+
 export async function setMemberArchived(id: string, expectedRev: number, archived: boolean): Promise<Member> {
   return writeTx(['members', 'attendance', 'activity'], async (tx) => {
     if (archived) {

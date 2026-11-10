@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import 'fake-indexeddb/auto'
 import { IDBFactory } from 'fake-indexeddb'
 import { closeDb, getDb } from './db'
-import { createMember, setMemberArchived, updateMember, listMembers, getMember } from './services/members'
+import { createMember, setMemberArchived, setMemberPhoto, updateMember, listMembers, getMember } from './services/members'
 import { createPlan } from './services/plans'
 import { assignMembership, createMemberWithMembership } from './services/memberships'
 import { recordPayment, listInvoices, listPayments, listAdjustments, voidPayment, voidInvoice, addAdjustment } from './services/payments'
@@ -124,6 +124,21 @@ describe('archive keeps history', () => {
     expect((await listInvoices()).length).toBe(1)
     expect((await listPayments()).length).toBe(1)
     await expect(assignMembership({ memberId: member.id, planId: plan.id, startDate: today, discountPaise: 0, initialPaymentPaise: 0, paymentMethod: 'cash' })).rejects.toThrow(/Restore/)
+  })
+})
+
+describe('member photo', () => {
+  it('sets and clears only the photo, checks the revision and refuses anything that is not a small image', async () => {
+    const m = await createMember({ name: 'Photo Person', phone: '9876500000', joiningDate: today, notes: 'keep me' })
+    const photo = 'data:image/jpeg;base64,/9j/4AAQ'
+    const withPhoto = await setMemberPhoto(m.id, m.rev, photo)
+    expect(withPhoto).toMatchObject({ photoDataUrl: photo, notes: 'keep me', name: 'Photo Person', rev: m.rev + 1 })
+    await expect(setMemberPhoto(m.id, m.rev, photo)).rejects.toThrow()
+    await expect(setMemberPhoto(m.id, withPhoto.rev, 'https://example.com/a.jpg')).rejects.toThrow(/image/)
+    await expect(setMemberPhoto(m.id, withPhoto.rev, 'data:image/jpeg;base64,' + 'A'.repeat(400_000))).rejects.toThrow(/large/)
+    const cleared = await setMemberPhoto(m.id, withPhoto.rev, undefined)
+    expect(cleared.photoDataUrl).toBeUndefined()
+    expect((await getMember(m.id))?.notes).toBe('keep me')
   })
 })
 

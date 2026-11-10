@@ -814,7 +814,7 @@ test.describe('6. archive and restore', () => {
     await page.goto(url + '?tab=payments')
     await expect(page.getByRole('tab', { name: /Payments & invoices/ })).toHaveAttribute('aria-selected', 'true')
     // void the payment first (invoice can only be voided when nothing is paid)
-    await page.getByRole('button', { name: 'Void' }).last().click()
+    await page.getByRole('button', { name: 'Void', exact: true }).last().click()
     let dialog = page.getByRole('dialog')
     await expect(dialog.getByRole('heading', { name: /Void payment of ₹500.00/ })).toBeVisible()
     await dialog.getByLabel('Reason').fill('Entered twice')
@@ -826,7 +826,7 @@ test.describe('6. archive and restore', () => {
     expect(pays[0]).toMatchObject({ status: 'void', voidReason: 'Entered twice' })
     await expect(page.getByText('₹1,500.00').first()).toBeVisible()
 
-    await page.getByRole('button', { name: 'Void' }).first().click()
+    await page.getByRole('button', { name: 'Void', exact: true }).first().click()
     dialog = page.getByRole('dialog')
     await expect(dialog.getByRole('heading', { name: /Void invoice RK-00001/ })).toBeVisible()
     await dialog.getByLabel('Reason').fill('Wrong plan')

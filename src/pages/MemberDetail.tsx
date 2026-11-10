@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { appUrl } from '@/lib/appUrl'
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { Pencil, Archive, ArchiveRestore, Receipt, CreditCard, ClipboardCheck, LogOut, FileText, Ban, Printer, MessageCircle } from 'lucide-react'
+import { Pencil, Archive, ArchiveRestore, Receipt, CreditCard, ClipboardCheck, LogOut, FileText, Ban, Printer, MessageCircle, Camera } from 'lucide-react'
 import { assignWorkout } from '@/data/services/workouts'
 import { labelFor as labelOf, GENDERS } from '@/domain/types'
 import { ageOn } from '@/domain/dates'
@@ -26,6 +26,7 @@ import { EmptyState, ErrorState } from '@/components/ui/EmptyState'
 import { MembershipStateBadge, PaymentStatusBadge } from '@/components/domain/MembershipBadge'
 import { MembershipDialog } from '@/components/domain/MembershipDialog'
 import { PaymentDialog } from '@/components/domain/PaymentDialog'
+import { MemberPhotoDialog } from '@/components/domain/MemberPhotoDialog'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { useCheckIn } from '@/components/domain/CheckInDialog'
 import { useToast } from '@/components/ui/Toast'
@@ -53,6 +54,7 @@ export function MemberDetailPage() {
   const [dialog, setDialog] = useState<'membership' | 'payment' | 'archive' | null>(null)
   const [voidTarget, setVoidTarget] = useState<{ kind: 'payment' | 'invoice'; id: string; rev: number; label: string } | null>(null)
   const [payInvoiceId, setPayInvoiceId] = useState<string | undefined>()
+  const [photoOpen, setPhotoOpen] = useState(false)
 
   const member = snap.data?.members.find((m) => m.id === id)
   usePage(member ? member.name : 'Member', member ? `Profile, memberships, attendance and payments for ${member.name}` : undefined, { header: false })
@@ -146,7 +148,12 @@ export function MemberDetailPage() {
       <Card>
         <CardBody className="flex flex-col gap-4">
           <div className="flex items-start gap-4">
-            <Avatar name={member.name} src={member.photoDataUrl} size="xl" />
+            <button type="button" onClick={() => setPhotoOpen(true)} className="pressable group relative shrink-0 rounded-full" aria-label={member.photoDataUrl ? `View or change photo of ${member.name}` : `Add a photo of ${member.name}`}>
+              <Avatar name={member.name} src={member.photoDataUrl} size="xl" />
+              <span className="absolute -bottom-0.5 -right-0.5 flex h-6 w-6 items-center justify-center rounded-full border border-line bg-surface text-muted shadow-card group-hover:text-ink" aria-hidden>
+                <Camera className="h-3.5 w-3.5" />
+              </span>
+            </button>
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
                 <h1 className="text-3xl font-medium leading-tight">{member.name}</h1>
@@ -389,6 +396,7 @@ export function MemberDetailPage() {
 
       {dialog === 'membership' ? <MembershipDialog open onClose={() => setDialog(null)} member={member} plans={snap.data.plans} memberships={data.memberships} /> : null}
       {dialog === 'payment' ? <PaymentDialog open onClose={() => setDialog(null)} member={member} invoices={data.invoices} payments={data.payments} adjustments={data.adjustments} preferredInvoiceId={payInvoiceId} /> : null}
+      {photoOpen ? <MemberPhotoDialog member={member} onClose={() => setPhotoOpen(false)} /> : null}
       <ConfirmDialog
         open={dialog === 'archive'}
         onClose={() => setDialog(null)}
