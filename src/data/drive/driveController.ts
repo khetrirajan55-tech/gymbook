@@ -35,7 +35,32 @@ export interface DriveState {
   overdue: boolean
 }
 
-let token: GoogleToken | null = null
+/**
+ * Google's browser sign-in gives a token that lasts about an hour and no way to renew it without a
+ * window. Kept only in memory it was lost on every reload, which on a phone looked like being logged
+ * out all the time and stopped the automatic backup. So the token is remembered on this device until
+ * it expires (it can reach nothing but GymBook's own hidden Drive folder).
+ */
+const TOKEN_KEY = 'gymbook-drive-token'
+function loadToken(): GoogleToken | null {
+  try {
+    const t = JSON.parse(localStorage.getItem(TOKEN_KEY) ?? 'null') as GoogleToken | null
+    return t && typeof t.token === 'string' && typeof t.expiresAt === 'number' && t.expiresAt > Date.now() ? t : null
+  } catch {
+    return null
+  }
+}
+function setToken(next: GoogleToken | null): void {
+  token = next
+  try {
+    if (next) localStorage.setItem(TOKEN_KEY, JSON.stringify(next))
+    else localStorage.removeItem(TOKEN_KEY)
+  } catch {
+    // storage blocked: the session simply lasts until the page is reloaded
+  }
+}
+
+let token: GoogleToken | null = loadToken()
 let state: DriveState = { configured: Boolean(GOOGLE_CLIENT_ID), account: null, link: loadLink(), situation: null, busy: null, blocked: null, notice: null, changed: false, overdue: false }
 const listeners = new Set<() => void>()
 
@@ -72,7 +97,7 @@ function client(): DriveClient {
 /** An expired or revoked token ends the session; the link to the account stays. */
 function handleFailure(err: unknown, title: string): void {
   if (err instanceof DriveError && err.kind === 'auth') {
-    token = null
+    setToken(null)
     set({ account: null, situation: null, busy: null, notice: notice('danger', title, err.message) })
     return
   }
@@ -117,7 +142,7 @@ export async function signIn(options: { chooseAccount?: boolean } = {}): Promise
   if (state.busy) return
   set({ busy: 'signing-in', notice: null, blocked: null })
   try {
-    token = await requestGoogleToken({ interactive: true, chooseAccount: options.chooseAccount, hint: options.chooseAccount ? undefined : state.link?.email })
+    setToken(await requestGoogleToken({ interactive: true, chooseAccount: options.chooseAccount, hint: options.chooseAccount ? undefined : state.link?.email }))
     silentRefused = false
     set({ busy: 'checking' })
     await inspect()
@@ -130,14 +155,14 @@ export async function signIn(options: { chooseAccount?: boolean } = {}): Promise
 
 /** Forget the session on this device. The backup in Drive and the link to the account are kept. */
 export function signOut(): void {
-  token = null
+  setToken(null)
   set({ account: null, situation: null, blocked: null, notice: null })
 }
 
 /** Remove GymBook's access to the Google account and forget which account this device backs up to. The Drive file is not deleted. */
 export async function disconnect(): Promise<void> {
   const current = token
-  token = null
+  setToken(null)
   clearLink()
   set({ account: null, situation: null, blocked: null, changed: false, notice: notice('info', 'Disconnected from Google Drive', 'The backup file stays in that Google account. Nothing on this device was deleted.') })
   if (current) await revokeGoogleAccess(current.token).catch(() => undefined)
@@ -242,17 +267,48 @@ let changeTimer: ReturnType<typeof setTimeout> | null = null
 /** Google or the browser refused a sign-in without a click. Asking again would only open blocked windows, so wait for a real click. */
 let silentRefused = false
 
+const TAP_RETRY_MS = 30 * 60 * 1000
+let lastTapAttempt = 0
+let tapArmed = false
+/**
+ * A browser only lets Google's window open from a tap. So when a backup is waiting and the hour-long
+ * sign-in has run out, the next tap in the app is used to renew it: Google's window opens and, since
+ * permission was already given, closes by itself. Tried at most once every half hour.
+ */
+function armTapSignIn(): void {
+  if (tapArmed || typeof window === 'undefined') return
+  if (Date.now() - lastTapAttempt < TAP_RETRY_MS) return
+  tapArmed = true
+  const onTap = () => {
+    window.removeEventListener('click', onTap, true)
+    tapArmed = false
+    const link = loadLink()
+    if (!link?.auto || !state.changed || state.busy || tokenValid()) return
+    lastTapAttempt = Date.now()
+    void requestGoogleToken({ interactive: true, hint: link.email })
+      .then((t) => {
+        setToken(t)
+        silentRefused = false
+        return autoBackup()
+      })
+      .catch(() => undefined)
+  }
+  window.addEventListener('click', onTap, true)
+}
+
 async function autoBackup(): Promise<void> {
   const link = loadLink()
   if (!state.configured || !link?.auto || state.busy || !state.changed) return
   if (typeof navigator !== 'undefined' && navigator.onLine === false) return
   if (!tokenValid()) {
     if (silentRefused) return
-    // No screen may be shown without a click. If Google or the browser refuses, the reminder stays up.
+    // No screen may be shown without a click. If Google or the browser refuses (phones always do),
+    // the next tap anywhere in the app renews the sign-in instead.
     try {
-      token = await requestGoogleToken({ interactive: false, hint: link.email })
+      setToken(await requestGoogleToken({ interactive: false, hint: link.email }))
     } catch {
       silentRefused = true
+      armTapSignIn()
       return
     }
   }
@@ -272,13 +328,18 @@ export function startAutoBackup(): void {
   if (started || !state.configured) return
   started = true
   void refreshChanged()
+  // Still inside the hour after a reload: show the account as signed in without asking Google again.
+  if (tokenValid() && loadLink()) void inspect().catch((err) => handleFailure(err, 'Could not reach Google Drive'))
   subscribeToData(() => {
     if (!loadLink()) return
     set({ changed: true })
     if (changeTimer) clearTimeout(changeTimer)
     changeTimer = setTimeout(() => void autoBackup(), AFTER_CHANGE_MS)
   })
-  setInterval(() => void autoBackup(), CHECK_EVERY_MS)
+  setInterval(() => {
+    if (silentRefused && !tokenValid()) armTapSignIn()
+    void autoBackup()
+  }, CHECK_EVERY_MS)
   // The token is gone after a reload, so the first check only succeeds if Google lets it through silently.
   setTimeout(() => void autoBackup(), 5000)
 }
@@ -291,7 +352,7 @@ export async function backupFromReminder(): Promise<void> {
 
 /** Called when all local data is wiped: the next sign-in must offer a restore, never upload an empty app. */
 export function forgetDriveLink(): void {
-  token = null
+  setToken(null)
   clearLink()
   set({ account: null, situation: null, blocked: null, changed: false, notice: null })
 }

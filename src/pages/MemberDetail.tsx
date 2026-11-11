@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { appUrl } from '@/lib/appUrl'
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Pencil, Archive, ArchiveRestore, Receipt, CreditCard, ClipboardCheck, LogOut, FileText, Ban, Printer, MessageCircle, Camera } from 'lucide-react'
@@ -55,6 +55,14 @@ export function MemberDetailPage() {
   const [voidTarget, setVoidTarget] = useState<{ kind: 'payment' | 'invoice'; id: string; rev: number; label: string } | null>(null)
   const [payInvoiceId, setPayInvoiceId] = useState<string | undefined>()
   const [photoOpen, setPhotoOpen] = useState(false)
+  // Arriving from a member card's Renew button: open the plan dialog once and tidy the address.
+  useEffect(() => {
+    if (params.get('action') !== 'renew') return
+    setDialog('membership')
+    const next = new URLSearchParams(params)
+    next.delete('action')
+    setParams(next, { replace: true })
+  }, [params, setParams])
 
   const member = snap.data?.members.find((m) => m.id === id)
   usePage(member ? member.name : 'Member', member ? `Profile, memberships, attendance and payments for ${member.name}` : undefined, { header: false })

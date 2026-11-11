@@ -5,8 +5,8 @@
  * (`drive.appdata`). It cannot see or change any other file in that Drive.
  *
  * There is no client secret: the client ID is a public identifier, and Google only honours it from
- * the web addresses registered for it. The access token Google returns is kept in memory by the
- * caller and is never written to storage; it stops working after about an hour.
+ * the web addresses registered for it. The access token Google returns stops working after about
+ * an hour; the caller remembers it on the device for that hour only.
  */
 
 /** Public OAuth client ID, set at build time. Empty means Google Drive backup is not set up for this site. */

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { UserPlus, Users } from 'lucide-react'
+import { UserPlus, Users, Phone, MessageCircle, ClipboardCheck, CreditCard } from 'lucide-react'
 import { usePage, useApp } from '@/app/AppContext'
 import { useLiveQuery } from '@/hooks/useLiveQuery'
 import { loadSnapshot, SNAPSHOT_STORES } from '@/data/snapshot'
@@ -14,9 +14,10 @@ import { SearchInput, Avatar, Tabs } from '@/components/ui/misc'
 import { Pagination, paginate } from '@/components/ui/Pagination'
 import { PageLoading } from '@/components/ui/Spinner'
 import { EmptyState, ErrorState } from '@/components/ui/EmptyState'
-import { MembershipStateBadge } from '@/components/domain/MembershipBadge'
 import { SampleBadge, Badge } from '@/components/ui/Badge'
 import { filterMembers } from '@/components/domain/MemberPicker'
+import { useCheckIn } from '@/components/domain/CheckInDialog'
+import { expiryMessage, whatsappUrl } from '@/domain/whatsapp'
 
 type Filter = 'all' | 'active' | 'expiring' | 'expired' | 'none' | 'archived'
 type SortKey = 'name' | 'joined' | 'expiry' | 'lastVisit'
@@ -27,7 +28,8 @@ const cmpStr = (a: string | undefined, b: string | undefined) => (a === b ? 0 : 
 
 export function MembersPage() {
   usePage('Members', 'Search, filter and manage gym members')
-  const { today } = useApp()
+  const { today, settings } = useApp()
+  const { checkIn, dialog: checkInDialog } = useCheckIn()
   const [params, setParams] = useSearchParams()
   const q = params.get('q') ?? ''
   const filter = (params.get('filter') as Filter) || 'all'
@@ -137,6 +139,7 @@ export function MembersPage() {
           { value: 'archived', label: 'Archived', count: counts.archived },
         ]}
       />
+      {checkInDialog}
       {noMembersAtAll ? (
         <Card>
           <EmptyState icon={<Users className="h-5 w-5" aria-hidden />} title="No members yet" description="Add your first member to start selling memberships and recording attendance" action={<LinkButton to="/members/new" icon={<UserPlus className="h-4 w-4" aria-hidden />}>Add member</LinkButton>} />
@@ -149,7 +152,7 @@ export function MembersPage() {
         <>
           <ul aria-label="Members" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {slice.map((r) => (
-              <MemberCard key={r.member.id} row={r} today={today} />
+              <MemberCard key={r.member.id} row={r} today={today} gym={{ name: settings.gymName, phone: settings.phone }} onCheckIn={(m) => void checkIn(m)} />
             ))}
           </ul>
           <Card>
@@ -161,51 +164,85 @@ export function MembersPage() {
   )
 }
 
-/** One member as a card: who they are, where their membership stands, and the three facts the desk asks about. */
-function MemberCard({ row: r, today }: { row: MemberRow; today: string }) {
+/**
+ * One member as a card, laid out like the desk's old app: photo, name, member ID and mobile, the plan's
+ * expiry in its status colour, and the four things done most from the list. Expired cards carry red
+ * corners, cards about to expire amber ones, so a screen of members can be read by colour alone.
+ */
+function MemberCard({ row: r, today, gym, onCheckIn }: { row: MemberRow; today: string; gym: { name: string; phone: string }; onCheckIn: (m: MemberRow['member']) => void }) {
   const m = r.member
   const archived = m.status === 'archived'
   const daysLeft = r.current && r.state !== 'upcoming' ? diffDays(today, r.current.endDate) : null
-  // The expiry date itself sits in the facts row below, so this line carries the plan and how far along it is.
-  const planLine = !r.current
+  const status = !r.current
     ? 'No plan yet'
     : r.state === 'upcoming'
-      ? `${r.current.planName} · starts ${formatDate(r.current.startDate)}`
+      ? `Starts ${formatDate(r.current.startDate)}`
       : r.state === 'expired'
-        ? `${r.current.planName} · expired`
+        ? 'Expired'
         : daysLeft === 0
-          ? `${r.current.planName} · ends today`
-          : `${r.current.planName} · ${daysLeft} day${daysLeft === 1 ? '' : 's'} left`
+          ? 'Ends today'
+          : `${daysLeft} day${daysLeft === 1 ? '' : 's'} left`
+  const tone = r.state === 'expired' ? 'danger' : r.state === 'expiring' ? 'warn' : null
+  const corner = tone === 'danger' ? 'border-danger' : 'border-warn'
+  const toneText = tone === 'danger' ? 'text-danger' : tone === 'warn' ? 'text-warn' : undefined
+  // A plan that has ended or is about to: WhatsApp opens with the renewal reminder written; otherwise an empty chat.
+  const waText = r.current && tone ? expiryMessage({ gymName: gym.name, gymPhone: gym.phone, memberName: m.name, planName: r.current.planName, endDate: r.current.endDate, today }) : ''
+  const action = 'pressable relative z-[1] flex min-w-0 flex-col items-center gap-1 rounded-lg px-1 py-1.5 text-xs text-muted hover:bg-sunken hover:text-ink'
   return (
-    <li className={cn('surface-card pressable relative flex min-w-0 flex-col rounded-2xl p-4 hover:border-line-strong focus-within:border-line-strong', archived && 'opacity-80')}>
-      <div className="flex items-start gap-3">
-        <Avatar name={m.name} src={m.photoDataUrl} size="lg" />
+    <li className={cn('surface-card relative flex min-w-0 flex-col overflow-hidden rounded-2xl p-4 hover:border-line-strong focus-within:border-line-strong', archived && 'opacity-80')}>
+      {tone ? (
+        <>
+          <span aria-hidden className={cn('pointer-events-none absolute -right-px -top-px h-11 w-11 rounded-tr-2xl border-r-[5px] border-t-[5px]', corner)} />
+          <span aria-hidden className={cn('pointer-events-none absolute -bottom-px -left-px h-11 w-11 rounded-bl-2xl border-b-[5px] border-l-[5px]', corner)} />
+        </>
+      ) : null}
+      <div className="flex items-start gap-3.5">
+        <Avatar name={m.name} src={m.photoDataUrl} size="xl" />
         <div className="min-w-0 flex-1">
-          <p className="truncate leading-5">
-            {/* The name is the link; its ::after stretches over the whole card so anywhere on it opens the member. */}
-            <Link to={`/members/${m.id}`} className="font-medium text-ink outline-none hover:underline after:absolute after:inset-0 after:rounded-2xl">
-              {m.name}
-            </Link>
-          </p>
-          <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted">
-            <span className="tabular">{m.phone}</span>
+          <div className="flex items-center gap-2 pr-6">
+            <h3 className="min-w-0 truncate text-md font-medium leading-6">
+              {/* The name is the link; its ::after stretches over the whole card so anywhere on it opens the member. */}
+              <Link to={`/members/${m.id}`} className="text-ink outline-none hover:underline after:absolute after:inset-0 after:rounded-2xl">
+                {m.name}
+              </Link>
+            </h3>
             {m.sample ? <SampleBadge /> : null}
             {archived ? <Badge tone="muted">Archived</Badge> : null}
-          </p>
+          </div>
+          <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-2">
+            <div className="min-w-0">
+              <dt className="text-xs text-muted">Member ID</dt>
+              <dd className="tabular truncate text-sm">{m.memberCode ?? '—'}</dd>
+            </div>
+            <div className="min-w-0">
+              <dt className="text-xs text-muted">Mobile</dt>
+              <dd className="tabular truncate text-sm">{m.phone || '—'}</dd>
+            </div>
+            <div className="min-w-0">
+              <dt className="text-xs text-muted">Plan expiry</dt>
+              <dd className={cn('truncate text-sm font-medium', toneText)}>{r.current ? formatDate(r.current.endDate) : '—'}</dd>
+            </div>
+            <div className="min-w-0">
+              <dt className="truncate text-xs text-muted">{r.current ? r.current.planName : 'Plan'}</dt>
+              <dd className={cn('truncate text-sm font-medium', toneText ?? (r.current ? 'text-success' : 'text-muted'))}>{status}</dd>
+            </div>
+          </dl>
         </div>
-        <MembershipStateBadge state={r.state} />
       </div>
-      <p className={cn('mt-3 text-sm', r.current ? 'text-ink' : 'text-muted')}>{planLine}</p>
-      <dl className="mt-3 grid grid-cols-2 gap-2 border-t border-line pt-3">
-        <div className="min-w-0">
-          <dt className="text-xs text-muted">Plan expiry</dt>
-          <dd className={cn('mt-0.5 truncate text-sm', r.state === 'expired' ? 'text-danger' : r.state === 'expiring' ? 'text-warn' : undefined)}>{r.current ? formatDate(r.current.endDate) : '—'}</dd>
-        </div>
-        <div className="min-w-0">
-          <dt className="text-xs text-muted">Joined</dt>
-          <dd className="mt-0.5 truncate text-sm">{formatDate(m.joiningDate)}</dd>
-        </div>
-      </dl>
+      <div className="mt-3.5 grid grid-cols-4 gap-1 border-t border-line pt-2.5">
+        {m.phone ? (
+          <a className={action} href={`tel:${m.phone.replace(/[^\d+]/g, '')}`}><Phone className="h-5 w-5" aria-hidden />Call</a>
+        ) : <span />}
+        {m.phone ? (
+          <a className={action} href={whatsappUrl(m.phone, waText)} target="_blank" rel="noopener noreferrer"><MessageCircle className="h-5 w-5" aria-hidden />WhatsApp</a>
+        ) : <span />}
+        {!archived ? (
+          <button type="button" className={action} onClick={() => onCheckIn(m)}><ClipboardCheck className="h-5 w-5" aria-hidden />Check in</button>
+        ) : <span />}
+        {!archived ? (
+          <Link className={action} to={`/members/${m.id}?action=renew`}><CreditCard className="h-5 w-5" aria-hidden />{r.current ? 'Renew' : 'Sell plan'}</Link>
+        ) : <span />}
+      </div>
     </li>
   )
 }

@@ -692,7 +692,7 @@ test.describe('5. list with 45 members', () => {
     const cards = main.getByRole('list', { name: 'Members' }).getByRole('listitem')
     const names = async () => {
       await expect(cards.first()).toBeVisible()
-      return cards.getByRole('link').allTextContents()
+      return cards.getByRole('heading').allTextContents()
     }
     const sortSel = page.getByLabel('Sort by')
 

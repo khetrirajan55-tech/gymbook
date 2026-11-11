@@ -57,7 +57,11 @@ async function addTestMember(page: Page, name = 'Drive Test Member', phone = '98
 }
 
 /** Open Settings (a full page load, so any earlier Google session is gone) and sign in. */
+/** The remembered Google sign-in lasts an hour; tests that need a signed-out start let that hour "run out". */
+const expireSession = (page: Page) => page.evaluate(() => localStorage.removeItem('gymbook-drive-token'))
+
 async function openAndSignIn(page: Page, token = 'token-a') {
+  await expireSession(page)
   await page.goto('/settings')
   await setGoogle(page, { token })
   await section(page).getByRole('button', { name: 'Sign in with Google' }).click()
@@ -123,8 +127,11 @@ test.describe('Google Drive backup', () => {
     await expect(section(page)).toContainText(formatDateTime(first.modifiedTime, TZ))
     await expect(section(page)).toContainText('1 member')
     await expect(section(page)).toContainText('Up to date')
-    // the token is not written anywhere a later visit could read it
-    expect(await page.evaluate(() => JSON.stringify(localStorage))).not.toContain('token-a')
+    // the token is remembered in one place only, for no longer than Google's hour, and signing out removes it
+    const kept = await page.evaluate(() => Object.entries(localStorage).filter(([, v]) => v.includes('token-a')).map(([k, v]) => ({ k, left: (JSON.parse(v) as { expiresAt: number }).expiresAt - Date.now() })))
+    expect(kept.map((x) => x.k)).toEqual(['gymbook-drive-token'])
+    expect(kept[0].left).toBeGreaterThan(0)
+    expect(kept[0].left).toBeLessThanOrEqual(3600_000)
 
     if (process.env.SHOT_DIR) {
       await section(page).scrollIntoViewIfNeeded()
@@ -147,6 +154,9 @@ test.describe('Google Drive backup', () => {
     await page.getByRole('button', { name: 'Save changes' }).click()
     await expect(page).toHaveURL(memberUrl)
     await page.goto('/settings')
+    await section(page).getByRole('button', { name: 'Sign out' }).click()
+    expect(await page.evaluate(() => JSON.stringify(localStorage))).not.toContain('token-a')
+    await page.reload()
     await expect(section(page)).toContainText('Changes on this device are not backed up yet')
     await expect(section(page)).toContainText(`${A.email} (signed out)`)
     await section(page).getByRole('button', { name: 'Sign in with Google' }).click()
@@ -362,6 +372,7 @@ test.describe('Google Drive backup', () => {
       link.lastBackupAt = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString()
       localStorage.setItem('gymbook-drive-link', JSON.stringify(link))
     })
+    await expireSession(page)
     await page.close()
     await new Promise((r) => setTimeout(r, 3000))
     expect(drive.uploads()).toBe(2)
@@ -374,11 +385,17 @@ test.describe('Google Drive backup', () => {
     await expect(reminder).toBeVisible()
     await reopened.waitForTimeout(6500)
     expect(drive.uploads()).toBe(2)
-    // one tap signs in (the tap allows Google's window) and backs up
-    await reminder.getByRole('button', { name: 'Back up now' }).click()
+    // any tap in the app renews the sign-in (a tap is what lets Google's window open) and the backup follows
+    await reopened.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Members', exact: true }).click()
     await expect.poll(() => drive.uploads()).toBe(3)
     await expect(reminder).toHaveCount(0)
     expect(stored(drive, A.id).data.plans.map((p) => p.name)).toContain('Yearly')
+    // and the sign-in is remembered across a reload for its hour: no "signed out" on reopening
+    await reopened.goto('/settings')
+    await expect(section(reopened)).toContainText(A.email)
+    await expect(section(reopened)).not.toContainText('(signed out)')
+    await expect(section(reopened).getByRole('button', { name: 'Back up now' })).toBeVisible()
+    await expireSession(reopened)
     await reopened.close()
 
     // reopened where Google does allow it silently: the change is backed up without any click
