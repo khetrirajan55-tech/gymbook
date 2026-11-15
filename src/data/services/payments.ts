@@ -151,3 +151,18 @@ export async function addAdjustment(input: { invoiceId: string; amountPaise: Pai
     return adj
   })
 }
+
+/**
+ * Remove a payment that was entered by mistake, as if it had never been recorded. Unlike voiding,
+ * it does not stay in the member's history; only the activity log keeps a line.
+ */
+export async function deletePayment(id: string, expectedRev: number): Promise<void> {
+  await writeTx(['payments', 'invoices', 'activity'], async (tx) => {
+    const p = await tx.objectStore('payments').get(id)
+    if (!p) throw new DomainError('payment-missing', 'This payment no longer exists.')
+    if (p.rev !== expectedRev) throw new DomainError('conflict', 'This payment was changed somewhere else. Reload and try again.')
+    const invoice = p.invoiceId ? await tx.objectStore('invoices').get(p.invoiceId) : undefined
+    await tx.objectStore('payments').delete(id)
+    await logActivity(tx, { kind: 'payment', message: `Deleted mistaken payment of ${formatINR(p.amountPaise)}${invoice ? ` on ${invoice.number}` : ''}`, memberId: p.memberId, refType: 'member', refId: p.memberId })
+  })
+}

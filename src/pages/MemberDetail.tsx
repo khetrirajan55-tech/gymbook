@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { appUrl } from '@/lib/appUrl'
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { Pencil, Archive, ArchiveRestore, Receipt, CreditCard, ClipboardCheck, LogOut, FileText, Ban, Printer, MessageCircle, Camera } from 'lucide-react'
+import { Pencil, Archive, ArchiveRestore, Receipt, CreditCard, ClipboardCheck, LogOut, FileText, Ban, Printer, MessageCircle, Camera, Trash2 } from 'lucide-react'
 import { assignWorkout } from '@/data/services/workouts'
 import { labelFor as labelOf, GENDERS } from '@/domain/types'
 import { ageOn } from '@/domain/dates'
@@ -11,8 +11,9 @@ import { useLiveQuery } from '@/hooks/useLiveQuery'
 import { loadSnapshot, SNAPSHOT_STORES } from '@/data/snapshot'
 import { listActivityForMember } from '@/data/services/activity'
 import { setMemberArchived } from '@/data/services/members'
+import { deleteMembership, deleteInvoice } from '@/data/services/memberships'
 import { checkOut } from '@/data/services/attendance'
-import { voidPayment, voidInvoice } from '@/data/services/payments'
+import { voidPayment, voidInvoice, deletePayment } from '@/data/services/payments'
 import { membershipState, memberMembershipState, invoiceBalance, memberBalance, pickCurrentMembership, latestEndDate } from '@/domain/membership'
 import { formatDate, formatDateTime, formatDuration, formatSpan, compareDates, diffDays } from '@/domain/dates'
 import { formatINR } from '@/domain/money'
@@ -55,6 +56,7 @@ export function MemberDetailPage() {
   const [voidTarget, setVoidTarget] = useState<{ kind: 'payment' | 'invoice'; id: string; rev: number; label: string } | null>(null)
   const [payInvoiceId, setPayInvoiceId] = useState<string | undefined>()
   const [photoOpen, setPhotoOpen] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<{ kind: 'membership' | 'invoice' | 'payment'; id: string; rev: number; what: string } | null>(null)
   // Arriving from a member card's Renew button: open the plan dialog once and tidy the address.
   useEffect(() => {
     if (params.get('action') !== 'renew') return
@@ -320,6 +322,7 @@ export function MemberDetailPage() {
                       {bal ? <PaymentStatusBadge status={bal.status} /> : null}
                       {bal && bal.balancePaise > 0 ? <span className="tabular text-danger">{formatINR(bal.balancePaise)} due</span> : null}
                       {inv ? <Link to={`/invoices/${inv.id}`} className="inline-flex items-center gap-1 text-accent-ink hover:underline"><FileText className="h-4 w-4" aria-hidden />{inv.number}</Link> : null}
+                      <Button size="sm" variant="ghost" icon={<Trash2 className="h-4 w-4" aria-hidden />} aria-label={`Delete ${m.planName} membership ${formatDate(m.startDate)} to ${formatDate(m.endDate)}`} onClick={() => setDeleteTarget({ kind: 'membership', id: m.id, rev: m.rev, what: `${m.planName}, ${formatDate(m.startDate)} to ${formatDate(m.endDate)}${inv ? `, with invoice ${inv.number}` : ''}${bal && bal.paidPaise > 0 ? ` and the ${formatINR(bal.paidPaise)} recorded as paid on it` : ''},` })}>Delete</Button>
                     </div>
                   </li>
                 )
@@ -371,6 +374,7 @@ export function MemberDetailPage() {
                           <Button size="sm" variant="ghost" icon={<Ban className="h-4 w-4" aria-hidden />} onClick={() => setVoidTarget({ kind: 'invoice', id: inv.id, rev: inv.rev, label: inv.number })}>Void</Button>
                         ) : null}
                         {inv.status === 'void' ? <span className="text-xs text-muted">Voided: {inv.voidReason}</span> : null}
+                        <Button size="sm" variant="ghost" icon={<Trash2 className="h-4 w-4" aria-hidden />} aria-label={`Delete invoice ${inv.number}`} onClick={() => setDeleteTarget({ kind: 'invoice', id: inv.id, rev: inv.rev, what: `Invoice ${inv.number}${inv.membershipId ? ', the membership sold on it' : ''}${bal.paidPaise > 0 ? ` and the ${formatINR(bal.paidPaise)} recorded as paid on it` : ''}` })}>Delete</Button>
                       </div>
                     </li>
                   )
@@ -392,7 +396,10 @@ export function MemberDetailPage() {
                         {p.status === 'void' ? <p className="text-xs text-danger">Voided: {p.voidReason}</p> : null}
                         {p.note ? <p className="text-xs text-muted">{p.note}</p> : null}
                       </div>
-                      {p.status === 'recorded' ? <Button size="sm" variant="ghost" onClick={() => setVoidTarget({ kind: 'payment', id: p.id, rev: p.rev, label: formatINR(p.amountPaise) })}>Void</Button> : null}
+                      <div className="flex shrink-0 items-center gap-1">
+                        {p.status === 'recorded' ? <Button size="sm" variant="ghost" onClick={() => setVoidTarget({ kind: 'payment', id: p.id, rev: p.rev, label: formatINR(p.amountPaise) })}>Void</Button> : null}
+                        <Button size="sm" variant="ghost" icon={<Trash2 className="h-4 w-4" aria-hidden />} aria-label={`Delete payment of ${formatINR(p.amountPaise)}`} onClick={() => setDeleteTarget({ kind: 'payment', id: p.id, rev: p.rev, what: `The payment of ${formatINR(p.amountPaise)}${inv ? ` on ${inv.number}` : ''}` })}>Delete</Button>
+                      </div>
                     </li>
                   )
                 })}
@@ -415,6 +422,21 @@ export function MemberDetailPage() {
         onConfirm={async () => {
           await setMemberArchived(member.id, member.rev, !archived)
           toast.success(archived ? 'Member restored' : 'Member archived')
+        }}
+      />
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        onClose={() => setDeleteTarget(null)}
+        title={`Delete this ${deleteTarget?.kind ?? 'record'}?`}
+        description={deleteTarget ? `${deleteTarget.what} will be removed completely, as if it was never entered. Use this only for a record made by mistake. It cannot be undone.` : undefined}
+        confirmLabel={`Delete ${deleteTarget?.kind ?? 'record'}`}
+        danger
+        onConfirm={async () => {
+          if (!deleteTarget) return
+          if (deleteTarget.kind === 'membership') await deleteMembership(deleteTarget.id, deleteTarget.rev)
+          else if (deleteTarget.kind === 'invoice') await deleteInvoice(deleteTarget.id, deleteTarget.rev)
+          else await deletePayment(deleteTarget.id, deleteTarget.rev)
+          toast.success(`${deleteTarget.kind[0].toUpperCase()}${deleteTarget.kind.slice(1)} deleted`)
         }}
       />
       <ConfirmDialog

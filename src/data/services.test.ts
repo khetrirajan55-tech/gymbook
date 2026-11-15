@@ -4,8 +4,8 @@ import { IDBFactory } from 'fake-indexeddb'
 import { closeDb, getDb } from './db'
 import { createMember, setMemberArchived, setMemberPhoto, updateMember, listMembers, getMember } from './services/members'
 import { createPlan } from './services/plans'
-import { assignMembership, createMemberWithMembership } from './services/memberships'
-import { recordPayment, listInvoices, listPayments, listAdjustments, voidPayment, voidInvoice, addAdjustment } from './services/payments'
+import { assignMembership, createMemberWithMembership, deleteMembership, deleteInvoice } from './services/memberships'
+import { recordPayment, listInvoices, listPayments, listAdjustments, voidPayment, voidInvoice, addAdjustment, deletePayment } from './services/payments'
 import { checkIn, checkOut, listAttendanceForMember, MembershipRequiredError } from './services/attendance'
 import { invoiceBalance, memberBalance } from '@/domain/membership'
 import { exportBackup, validateBackup, importBackup } from './backup'
@@ -139,6 +139,44 @@ describe('member photo', () => {
     const cleared = await setMemberPhoto(m.id, withPhoto.rev, undefined)
     expect(cleared.photoDataUrl).toBeUndefined()
     expect((await getMember(m.id))?.notes).toBe('keep me')
+  })
+})
+
+describe('deleting a mistaken membership', () => {
+  it('removes the membership, its invoice and its payments, and leaves the member and other records alone', async () => {
+    const { member, plan } = await memberAndPlan()
+    const first = await assignMembership({ memberId: member.id, planId: plan.id, startDate: today, discountPaise: 0, initialPaymentPaise: 150000, paymentMethod: 'cash' })
+    const second = await assignMembership({ memberId: member.id, planId: plan.id, startDate: '2027-06-01', discountPaise: 0, initialPaymentPaise: 50000, paymentMethod: 'upi' })
+    await expect(deleteMembership(second.membership.id, second.membership.rev + 5)).rejects.toThrow(/changed/)
+    await deleteMembership(second.membership.id, second.membership.rev)
+    const invoices = await listInvoices()
+    const payments = await listPayments()
+    expect(invoices.map((i) => i.id)).toEqual([first.invoiceId])
+    expect(payments).toHaveLength(1)
+    expect(payments[0].invoiceId).toBe(first.invoiceId)
+    expect((await getMember(member.id))?.name).toBe(member.name)
+    await expect(deleteMembership(second.membership.id, second.membership.rev)).rejects.toThrow(/no longer exists/)
+    // the next sale gets a fresh invoice number, never the deleted one
+    const third = await assignMembership({ memberId: member.id, planId: plan.id, startDate: '2027-08-01', discountPaise: 0, initialPaymentPaise: 0, paymentMethod: 'cash' })
+    expect(third.invoiceNumber).not.toBe(second.invoiceNumber)
+  })
+})
+
+describe('deleting a mistaken payment or invoice', () => {
+  it('a deleted payment is gone and the invoice owes it again; a deleted invoice takes its membership and payments', async () => {
+    const { member, plan } = await memberAndPlan()
+    const sale = await assignMembership({ memberId: member.id, planId: plan.id, startDate: today, discountPaise: 0, initialPaymentPaise: 50000, paymentMethod: 'cash' })
+    const extra = await recordPayment({ memberId: member.id, invoiceId: sale.invoiceId, amountPaise: 30000, method: 'upi', receivedAt: new Date().toISOString() })
+    await expect(deletePayment(extra.id, extra.rev + 1)).rejects.toThrow(/changed/)
+    await deletePayment(extra.id, extra.rev)
+    expect((await listPayments()).map((p) => p.amountPaise)).toEqual([50000])
+    const inv = (await listInvoices())[0]
+    expect(invoiceBalance(inv, await listPayments(), []).balancePaise).toBe(100000)
+    await deleteInvoice(inv.id, inv.rev)
+    expect(await listInvoices()).toHaveLength(0)
+    expect(await listPayments()).toHaveLength(0)
+    expect((await getMember(member.id))?.status).toBe('active')
+    await expect(deleteInvoice(inv.id, inv.rev)).rejects.toThrow(/no longer exists/)
   })
 })
 

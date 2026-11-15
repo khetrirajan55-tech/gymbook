@@ -161,3 +161,57 @@ export async function createMemberWithMembership(values: MemberFormValues, sale:
     }),
   )
 }
+
+/**
+ * Remove a membership that was entered by mistake, together with its invoice and every payment and
+ * adjustment recorded against that invoice, as if it had never been sold. Unlike voiding, nothing of
+ * it stays in the member's history or in the totals; only the activity log keeps a line. The invoice
+ * number is not handed out again.
+ */
+export async function deleteMembership(id: string, expectedRev: number): Promise<void> {
+  await writeTx(['memberships', 'invoices', 'payments', 'adjustments', 'activity'], async (tx) => {
+    const ms = await tx.objectStore('memberships').get(id)
+    if (!ms) throw new DomainError('membership-missing', 'This membership no longer exists.')
+    if (ms.rev !== expectedRev) throw new DomainError('conflict', 'This membership was changed somewhere else. Reload and try again.')
+    const invoice = ms.invoiceId ? await tx.objectStore('invoices').get(ms.invoiceId) : undefined
+    let removedPaise = 0
+    if (invoice) {
+      for (const p of await tx.objectStore('payments').index('invoiceId').getAll(invoice.id)) {
+        if (p.status === 'recorded') removedPaise += p.amountPaise
+        await tx.objectStore('payments').delete(p.id)
+      }
+      for (const a of await tx.objectStore('adjustments').index('invoiceId').getAll(invoice.id)) await tx.objectStore('adjustments').delete(a.id)
+      await tx.objectStore('invoices').delete(invoice.id)
+    }
+    // A later renewal that pointed at this one simply stops being marked as its renewal.
+    for (const other of await tx.objectStore('memberships').index('memberId').getAll(ms.memberId)) {
+      if (other.renewalOfId === id) await tx.objectStore('memberships').put({ ...other, renewalOfId: undefined, updatedAt: nowIso(), rev: other.rev + 1 })
+    }
+    await tx.objectStore('memberships').delete(id)
+    await logActivity(tx, {
+      kind: 'membership',
+      message: `Deleted mistaken membership ${ms.planName} (${formatDate(ms.startDate)} to ${formatDate(ms.endDate)})${invoice ? `, invoice ${invoice.number}` : ''}${removedPaise ? ` and ${(removedPaise / 100).toFixed(2)} INR of payments` : ''}`,
+      memberId: ms.memberId,
+      refType: 'member',
+      refId: ms.memberId,
+    })
+  })
+}
+
+/**
+ * Remove an invoice that was entered by mistake, with its payments and adjustments. An invoice that
+ * sold a membership takes that membership with it, exactly like deleting the membership itself.
+ */
+export async function deleteInvoice(id: string, expectedRev: number): Promise<void> {
+  const invoice = await readTx(['invoices'], (tx) => tx.objectStore('invoices').get(id))
+  if (!invoice) throw new DomainError('invoice-missing', 'This invoice no longer exists.')
+  if (invoice.rev !== expectedRev) throw new DomainError('conflict', 'This invoice was changed somewhere else. Reload and try again.')
+  const ms = invoice.membershipId ? await readTx(['memberships'], (tx) => tx.objectStore('memberships').get(invoice.membershipId!)) : undefined
+  if (ms) return deleteMembership(ms.id, ms.rev)
+  await writeTx(['invoices', 'payments', 'adjustments', 'activity'], async (tx) => {
+    for (const p of await tx.objectStore('payments').index('invoiceId').getAll(id)) await tx.objectStore('payments').delete(p.id)
+    for (const a of await tx.objectStore('adjustments').index('invoiceId').getAll(id)) await tx.objectStore('adjustments').delete(a.id)
+    await tx.objectStore('invoices').delete(id)
+    await logActivity(tx, { kind: 'invoice', message: `Deleted mistaken invoice ${invoice.number}`, memberId: invoice.memberId, refType: 'member', refId: invoice.memberId })
+  })
+}
