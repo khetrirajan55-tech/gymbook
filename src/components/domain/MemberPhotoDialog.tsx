@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Camera, ImageUp, Trash2 } from 'lucide-react'
 import type { Member } from '@/domain/types'
 import { Modal } from '@/components/ui/Modal'
@@ -7,6 +7,7 @@ import { Avatar } from '@/components/ui/misc'
 import { useToast } from '@/components/ui/Toast'
 import { CameraDialog } from './CameraDialog'
 import { setMemberPhoto } from '@/data/services/members'
+import { getMemberPhoto } from '@/data/services/photos'
 import { fileToSmallDataUrl } from '@/lib/image'
 import { errorMessage } from '@/data/errors'
 
@@ -20,6 +21,13 @@ export function MemberPhotoDialog({ member, onClose }: { member: Member; onClose
   const [cameraOpen, setCameraOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // The card shows a thumbnail; the full picture is read only here, when someone asks to see it.
+  const [full, setFull] = useState(member.photoDataUrl)
+  useEffect(() => {
+    let live = true
+    void getMemberPhoto(member).then((url) => { if (live && url) setFull(url) }).catch(() => undefined)
+    return () => { live = false }
+  }, [member])
 
   const save = async (photoDataUrl: string | undefined) => {
     setBusy(true)
@@ -53,7 +61,7 @@ export function MemberPhotoDialog({ member, onClose }: { member: Member; onClose
     <Modal open onClose={onClose} title={member.name} description={member.photoDataUrl ? 'Profile photo' : 'No photo yet'} size="sm">
       <div className="flex flex-col items-center gap-4">
         {member.photoDataUrl ? (
-          <img src={member.photoDataUrl} alt={`Photo of ${member.name}`} className="aspect-square w-full max-w-[280px] rounded-2xl object-cover ring-1 ring-line" />
+          <img src={full} alt={`Photo of ${member.name}`} className="aspect-square w-full max-w-[280px] rounded-2xl object-cover ring-1 ring-line" />
         ) : (
           <div className="flex w-full items-center justify-center rounded-2xl bg-sunken py-8">
             <Avatar name={member.name} size="xl" />

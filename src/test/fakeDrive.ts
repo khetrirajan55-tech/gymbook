@@ -54,7 +54,8 @@ export class FakeDrive {
   private failures: { match: (r: FakeRequest) => boolean; fail: Failure; times: number }[] = []
   /** Report a wrong checksum for the next upload, as if the stored bytes were damaged. */
   corruptNextUpload = false
-  log: { method: string; path: string; account?: string }[] = []
+  /** Every request, with the name of the file an upload was for (so tests can count data-file uploads apart from photo packs). */
+  log: { method: string; path: string; account?: string; name?: string }[] = []
   private seq = 0
   /**
    * Drive's clock for modifiedTime. It starts a minute ago in real time, not on a fixed date, because the
@@ -85,8 +86,28 @@ export class FakeDrive {
     return [...(this.folders.get(accountId)?.values() ?? [])]
   }
 
-  uploads(): number {
-    return this.log.filter((l) => l.path.startsWith('/upload/') && (l.method === 'POST' || l.method === 'PATCH')).length
+  /** Upload attempts for files of this name; by default the backup's data file, which is what "a backup was uploaded" means. */
+  uploads(name = 'gymbook-backup.json'): number {
+    return this.log.filter((l) => l.path.startsWith('/upload/') && (l.method === 'POST' || l.method === 'PATCH') && l.name === name).length
+  }
+
+  private uploadName(req: FakeRequest, url: URL, accountId: string | undefined): string | undefined {
+    const m = /^\/upload\/drive\/v3\/files(?:\/([^/]+))?$/.exec(url.pathname)
+    if (!m) return undefined
+    const folder = accountId ? this.folders.get(accountId) : undefined
+    try {
+      const uploadId = url.searchParams.get('upload_id')
+      if (uploadId) {
+        const session = this.sessions.get(uploadId)
+        return session?.metadata.name ?? (session?.fileId ? folder?.get(session.fileId)?.name : undefined)
+      }
+      if (m[1]) return folder?.get(decodeURIComponent(m[1]))?.name
+      if (url.searchParams.get('uploadType') === 'resumable') return (JSON.parse(dec.decode(req.body ?? enc.encode('{}'))) as { name?: string }).name
+      const parts = splitMultipart(req.body ?? new Uint8Array(), req.headers['content-type'] ?? req.headers['Content-Type'] ?? '')
+      return parts ? (JSON.parse(dec.decode(parts.metadata)) as { name?: string }).name : undefined
+    } catch {
+      return undefined
+    }
   }
 
   /** Put a file straight into an account's folder, as another device would have. */
@@ -109,7 +130,7 @@ export class FakeDrive {
     const url = new URL(req.url)
     const auth = req.headers.authorization ?? req.headers.Authorization ?? ''
     const accountId = this.tokens.get(auth.replace(/^Bearer\s+/i, ''))
-    this.log.push({ method: req.method, path: url.pathname, account: accountId })
+    this.log.push({ method: req.method, path: url.pathname, account: accountId, name: this.uploadName(req, url, accountId) })
 
     const failure = this.failures.find((f) => f.times > 0 && f.match(req))
     if (failure) {
@@ -143,6 +164,11 @@ export class FakeDrive {
       if (!file) return this.error(404, 'notFound', 'File not found.')
       if (url.searchParams.get('alt') === 'media') return { status: 200, headers: { 'content-type': 'application/octet-stream' }, body: file.content }
       return ok({ ...this.resource(file), trashed: false })
+    }
+
+    if (fileMatch && req.method === 'DELETE') {
+      if (!folder.delete(decodeURIComponent(fileMatch[1]))) return this.error(404, 'notFound', 'File not found.')
+      return { status: 204, headers: {}, body: '' }
     }
 
     const uploadMatch = /^\/upload\/drive\/v3\/files(?:\/([^/]+))?$/.exec(url.pathname)

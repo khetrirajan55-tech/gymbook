@@ -3,7 +3,7 @@ import { AlertTriangle, CloudUpload, CloudDownload, LogIn, LogOut } from 'lucide
 import { useApp } from '@/app/AppContext'
 import { backupNow, disconnect, dismissBlocked, previewRestore, restore, setAutoBackup, signIn, signOut } from '@/data/drive/driveController'
 import { useDriveState } from '@/hooks/useDriveState'
-import { remoteMembers, type RemotePreview } from '@/data/drive/driveBackup'
+import { backupBytes, remoteMembers, type RemotePreview } from '@/data/drive/driveBackup'
 import type { DriveFile } from '@/data/drive/driveApi'
 import { formatDateTime } from '@/domain/dates'
 import { Card, CardBody } from '@/components/ui/Card'
@@ -31,7 +31,7 @@ export function DriveBackupSection() {
 
   const describe = (file: DriveFile) => {
     const members = remoteMembers(file)
-    return [file.appProperties.gymName || null, members !== undefined ? `${members} member${members === 1 ? '' : 's'}` : null, `saved ${when(file.modifiedTime)}`, fmtMB(file.size)].filter(Boolean).join(' · ')
+    return [file.appProperties.gymName || null, members !== undefined ? `${members} member${members === 1 ? '' : 's'}` : null, `saved ${when(file.modifiedTime)}`, fmtMB(backupBytes(file))].filter(Boolean).join(' · ')
   }
 
   const openRestore = async () => {

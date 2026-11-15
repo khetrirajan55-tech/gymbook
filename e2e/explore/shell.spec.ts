@@ -27,7 +27,7 @@ const log = (type: string, description: string) => {
 }
 
 const ROUTES = ['/', '/members', '/members/new', '/plans', '/attendance', '/payments', '/payments?tab=invoices', '/follow-ups', '/workouts', '/activity', '/reports', '/settings']
-const STORES = ['members', 'plans', 'memberships', 'invoices', 'adjustments', 'payments', 'attendance', 'trainers', 'schedules', 'expenses', 'followups', 'sessions', 'equipment', 'incidents', 'workouts', 'settings', 'activity', 'counters'] as const
+const STORES = ['members', 'photos', 'plans', 'memberships', 'invoices', 'adjustments', 'payments', 'attendance', 'trainers', 'schedules', 'expenses', 'followups', 'sessions', 'equipment', 'incidents', 'workouts', 'settings', 'activity', 'counters'] as const
 
 type Settings = { rev: number; gymName: string; timezone: string; invoicePrefix: string; logoDataUrl?: string; dataMode: string; address: string }
 const settingsRow = async (page: Page) => (await readStore<Settings>(page, 'settings'))[0]
@@ -333,7 +333,7 @@ test.describe('3. backup', () => {
     await expect(page.getByRole('status').filter({ hasText: 'Backup exported' })).toBeVisible()
     expect(json.format).toBe('gymbook-backup')
     expect(json.version).toBe(1)
-    expect(json.dbVersion).toBe(2)
+    expect(json.dbVersion).toBe(3)
     expect(typeof json.exportedAt).toBe('string')
     expect(Object.keys(json.data).sort()).toEqual([...STORES].sort())
     for (const s of STORES) {

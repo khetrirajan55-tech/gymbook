@@ -10,6 +10,7 @@ import type {
   Incident,
   Invoice,
   Member,
+  MemberPhoto,
   Membership,
   Payment,
   Plan,
@@ -25,6 +26,7 @@ import { emitChange, type StoreName } from './events'
 
 export interface GymDB extends DBSchema {
   members: { key: string; value: Member; indexes: { status: string; name: string } }
+  photos: { key: string; value: MemberPhoto }
   plans: { key: string; value: Plan }
   memberships: { key: string; value: Membership; indexes: { memberId: string; endDate: string; startDate: string } }
   invoices: { key: string; value: Invoice; indexes: { memberId: string; number: string; issueDate: string } }
@@ -45,10 +47,11 @@ export interface GymDB extends DBSchema {
 }
 
 export const DB_NAME = 'gymbook'
-export const DB_VERSION = 2
+export const DB_VERSION = 3
 
 export const ALL_STORES: StoreName[] = [
   'members',
+  'photos',
   'plans',
   'memberships',
   'invoices',
@@ -149,6 +152,10 @@ async function open(): Promise<IDBPDatabase<GymDB>> {
           }
           if (n > 0) await counters.put({ key: 'member', value: n })
         })()
+      }
+      if (oldVersion < 3) {
+        // Full-size member photos move out of the member records (see services/photos.ts for the move itself).
+        db.createObjectStore('photos', { keyPath: 'id' })
       }
     },
     blocked() {

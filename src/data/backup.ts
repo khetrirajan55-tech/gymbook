@@ -29,6 +29,7 @@ const memberS = z.object({
   status: z.enum(['active', 'archived']),
   notes: z.string().optional(),
   photoDataUrl: z.string().optional(),
+  photoHash: z.string().optional(),
   trainerId: z.string().optional(),
   archivedAt: z.string().optional(),
   memberCode: z.string().optional(),
@@ -214,6 +215,7 @@ const activityS = z.object({
   refType: z.string().optional(),
   refId: z.string().optional(),
 })
+const photoS = z.object({ id: z.string().min(1), dataUrl: z.string().min(1), hash: z.string().min(1), updatedAt: z.string() })
 const counterS = z.object({ key: z.string(), value: z.number().int().min(0) })
 
 export const backupSchema = z.object({
@@ -223,6 +225,8 @@ export const backupSchema = z.object({
   dbVersion: z.number().int().optional(),
   data: z.object({
     members: z.array(memberS),
+    /** Full-size member photos. Absent in backups made before photos were stored apart, and in the Drive data file. */
+    photos: z.array(photoS).optional().default([]),
     plans: z.array(planS),
     memberships: z.array(membershipS),
     invoices: z.array(invoiceS),
@@ -245,7 +249,12 @@ export const backupSchema = z.object({
 
 export type Backup = z.infer<typeof backupSchema>
 
-export async function exportBackup(): Promise<Backup> {
+/**
+ * Everything in the database as one object. `photos: false` leaves the full-size pictures out, for
+ * callers that only need the records (the Drive backup sends pictures separately, once each).
+ */
+export async function exportBackup(options: { photos?: boolean } = {}): Promise<Backup> {
+  const withPhotos = options.photos !== false
   return readTx(ALL_STORES, async (tx) => {
     const settings = (await tx.objectStore('settings').get('settings')) ?? null
     return {
@@ -255,6 +264,7 @@ export async function exportBackup(): Promise<Backup> {
       dbVersion: DB_VERSION,
       data: {
         members: await tx.objectStore('members').getAll(),
+        photos: withPhotos ? await tx.objectStore('photos').getAll() : [],
         plans: await tx.objectStore('plans').getAll(),
         memberships: await tx.objectStore('memberships').getAll(),
         invoices: await tx.objectStore('invoices').getAll(),
@@ -398,6 +408,7 @@ export function validateBackup(text: string): ImportPreview {
 
   const counts: Record<string, number> = {
     members: d.members.length,
+    photos: d.photos.length || d.members.filter((m) => m.photoDataUrl || m.photoHash).length,
     plans: d.plans.length,
     memberships: d.memberships.length,
     invoices: d.invoices.length,
@@ -437,6 +448,8 @@ export async function importBackup(backup: Backup): Promise<void> {
     }
     const workoutIdSet = new Set(d.workouts.map((w) => w.id))
     await putAll('members', d.members.map((m) => (m.workoutPlanId && !workoutIdSet.has(m.workoutPlanId) ? { ...m, workoutPlanId: undefined } : m)))
+    const memberIdSet = new Set(d.members.map((m) => m.id))
+    await putAll('photos', d.photos.filter((p) => memberIdSet.has(p.id)))
     await putAll('plans', d.plans)
     await putAll('memberships', d.memberships)
     await putAll('invoices', d.invoices)

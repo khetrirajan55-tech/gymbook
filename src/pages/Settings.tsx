@@ -4,6 +4,7 @@ import { Download, Upload, Trash2, RotateCcw, Camera, AlertTriangle } from 'luci
 import { usePage, useApp } from '@/app/AppContext'
 import { updateSettings } from '@/data/services/settings'
 import { exportBackup, validateBackup, importBackup, type ImportPreview } from '@/data/backup'
+import { splitMemberPhotos } from '@/data/services/photos'
 import { removeSampleRecords, seedSampleData } from '@/data/sample'
 import { deleteDatabase } from '@/data/db'
 import { appUrl } from '@/lib/appUrl'
@@ -200,6 +201,7 @@ function BackupSection() {
     setBusy(true)
     try {
       await importBackup(preview.backup)
+      void splitMemberPhotos().catch(() => undefined)
       toast.success('Backup restored', 'All data was replaced with the backup contents.')
       setPreview(null)
     } catch (err) {

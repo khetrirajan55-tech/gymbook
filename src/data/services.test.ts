@@ -7,6 +7,7 @@ import { createPlan } from './services/plans'
 import { assignMembership, createMemberWithMembership, deleteMembership, deleteInvoice } from './services/memberships'
 import { recordPayment, listInvoices, listPayments, listAdjustments, voidPayment, voidInvoice, addAdjustment, deletePayment } from './services/payments'
 import { checkIn, checkOut, listAttendanceForMember, MembershipRequiredError } from './services/attendance'
+import { getPhotoRecord } from './services/photos'
 import { invoiceBalance, memberBalance } from '@/domain/membership'
 import { exportBackup, validateBackup, importBackup } from './backup'
 import { seedSampleData, removeSampleRecords } from './sample'
@@ -135,9 +136,15 @@ describe('member photo', () => {
     expect(withPhoto).toMatchObject({ photoDataUrl: photo, notes: 'keep me', name: 'Photo Person', rev: m.rev + 1 })
     await expect(setMemberPhoto(m.id, m.rev, photo)).rejects.toThrow()
     await expect(setMemberPhoto(m.id, withPhoto.rev, 'https://example.com/a.jpg')).rejects.toThrow(/image/)
-    await expect(setMemberPhoto(m.id, withPhoto.rev, 'data:image/jpeg;base64,' + 'A'.repeat(400_000))).rejects.toThrow(/large/)
+    await expect(setMemberPhoto(m.id, withPhoto.rev, 'data:image/jpeg;base64,' + 'A'.repeat(1_500_000))).rejects.toThrow(/large/)
+    // the full picture is kept apart from the member record, under the member's id, with its fingerprint on both
+    const kept = await getPhotoRecord(m.id)
+    expect(kept).toMatchObject({ id: m.id, dataUrl: photo })
+    expect(withPhoto.photoHash).toBe(kept!.hash)
     const cleared = await setMemberPhoto(m.id, withPhoto.rev, undefined)
     expect(cleared.photoDataUrl).toBeUndefined()
+    expect(cleared.photoHash).toBeUndefined()
+    expect(await getPhotoRecord(m.id)).toBeUndefined()
     expect((await getMember(m.id))?.notes).toBe('keep me')
   })
 })

@@ -29,10 +29,14 @@ const section = (page: Page) => page.locator('#drive')
 const isUpload = (r: { url: string }) => r.url.includes('/upload/')
 /** The backup as Drive holds it. It is gzip-compressed; Node's own gzip opens it, independently of the app's code. */
 const stored = (drive: FakeDrive, accountId: string) => {
-  const raw = Buffer.from(drive.files(accountId)[0].content)
+  const raw = Buffer.from(drive.files(accountId).filter((f) => f.name === 'gymbook-backup.json')[0].content)
   const text = raw[0] === 0x1f && raw[1] === 0x8b ? gunzipSync(raw).toString('utf8') : raw.toString('utf8')
   return JSON.parse(text) as { data: Record<string, Rec[]> }
 }
+/** The backup's data file in an account (the photo packs sit beside it under another name). */
+const dataFile = (drive: FakeDrive, accountId: string) => drive.files(accountId).filter((f) => f.name === 'gymbook-backup.json')[0]
+/** Members as the data file holds them: the photo named by its fingerprint, the thumbnail left out (it is remade on restore). */
+const bare = (rows: Rec[]) => rows.map((m) => (m.photoHash ? (Object.fromEntries(Object.entries(m).filter(([k]) => k !== 'photoDataUrl')) as Rec) : m))
 const byId = (rows: Rec[]) => [...rows].sort((x, y) => (x.id < y.id ? -1 : 1))
 
 async function snapshot(page: Page): Promise<Record<string, Rec[]>> {
@@ -119,10 +123,10 @@ test.describe('Google Drive backup', () => {
     await backUp(page)
     const saved = section(page).getByRole('status').filter({ hasText: 'Backup saved to Google Drive' })
     await expect(saved).toContainText('checked against what Google Drive stored')
-    expect(drive.files(A.id)).toHaveLength(1)
-    const first = { ...drive.files(A.id)[0] }
+    expect(drive.files(A.id).filter((f) => f.name === 'gymbook-backup.json')).toHaveLength(1)
+    const first = { ...dataFile(drive, A.id) }
     expect(first.name).toBe('gymbook-backup.json')
-    expect(byId(stored(drive, A.id).data.members)).toEqual(local.members)
+    expect(byId(stored(drive, A.id).data.members)).toEqual(bare(local.members))
     expect(byId(stored(drive, A.id).data.memberships)).toEqual(local.memberships)
     await expect(section(page)).toContainText(formatDateTime(first.modifiedTime, TZ))
     await expect(section(page)).toContainText('1 member')
@@ -163,8 +167,8 @@ test.describe('Google Drive backup', () => {
     await backUp(page)
     await expect(saved).toBeVisible()
     expect(drive.uploads()).toBe(2)
-    expect(drive.files(A.id)).toHaveLength(1)
-    const second = drive.files(A.id)[0]
+    expect(drive.files(A.id).filter((f) => f.name === 'gymbook-backup.json')).toHaveLength(1)
+    const second = dataFile(drive, A.id)
     expect(second.id).toBe(first.id)
     expect(second.modifiedTime > first.modifiedTime).toBe(true)
     expect(stored(drive, A.id).data.members[0].name).toBe('Drive Test Member Renamed')
@@ -212,7 +216,7 @@ test.describe('Google Drive backup', () => {
   test('5. a different Google account cannot see the backup, and this device’s data is not uploaded to it', async ({ page }) => {
     const drive = newDrive()
     await gymWithBackup(page, drive)
-    const fileA = { ...drive.files(A.id)[0] }
+    const fileA = { ...dataFile(drive, A.id) }
     const uploads = drive.uploads()
 
     await setGoogle(page, { token: 'token-b' })
@@ -234,21 +238,21 @@ test.describe('Google Drive backup', () => {
     await confirm.getByRole('button', { name: 'Cancel' }).click()
     expect(drive.files(B.id)).toEqual([])
     expect(drive.uploads()).toBe(uploads)
-    expect(drive.files(A.id)[0]).toEqual(fileA)
+    expect(dataFile(drive, A.id)).toEqual(fileA)
     expect(JSON.parse((await page.evaluate(() => localStorage.getItem('gymbook-drive-link')))!)).toMatchObject({ accountId: A.id })
 
     // an explicit yes moves this device to account B; account A's backup is left as it was
     await backUp(page)
     await confirm.getByRole('button', { name: 'Replace with this device’s data' }).click()
     await expect(section(page).getByRole('status').filter({ hasText: 'Backup saved to Google Drive' })).toBeVisible()
-    expect(drive.files(B.id)).toHaveLength(1)
-    expect(drive.files(A.id)[0]).toEqual(fileA)
+    expect(drive.files(B.id).filter((f) => f.name === 'gymbook-backup.json')).toHaveLength(1)
+    expect(dataFile(drive, A.id)).toEqual(fileA)
   })
 
   test('6. failures are reported as failures and nothing is lost', async ({ page }) => {
     const drive = newDrive()
     const memberUrl = await gymWithBackup(page, drive)
-    const good = { ...drive.files(A.id)[0] }
+    const good = { ...dataFile(drive, A.id) }
     const lastBackupLine = formatDateTime(good.modifiedTime, TZ)
     const alert = section(page).getByRole('alert')
 
@@ -266,7 +270,7 @@ test.describe('Google Drive backup', () => {
     await backUp(page)
     await expect(alert).toContainText('Backup failed; nothing was changed in Google Drive')
     await expect(alert).toContainText('Could not reach Google Drive')
-    expect(drive.files(A.id)[0]).toEqual(good)
+    expect(dataFile(drive, A.id)).toEqual(good)
     await expect(section(page)).toContainText(lastBackupLine)
     await expect(section(page).getByRole('status').filter({ hasText: 'Backup saved' })).toHaveCount(0)
 
@@ -283,7 +287,7 @@ test.describe('Google Drive backup', () => {
     drive.failNext(isUpload, { status: 403, reason: 'storageQuotaExceeded', message: 'The user’s Drive storage quota has been exceeded.' }, 1)
     await backUp(page)
     await expect(alert).toContainText('storage is full')
-    expect(drive.files(A.id)[0]).toEqual(good)
+    expect(dataFile(drive, A.id)).toEqual(good)
 
     // Drive stores something other than what was sent
     drive.corruptNextUpload = true
@@ -333,7 +337,7 @@ test.describe('Google Drive backup', () => {
     await section(page).getByRole('button', { name: 'Sign in with Google' }).click()
     await backUp(page)
     await expect(section(page).getByRole('status').filter({ hasText: 'Backup saved to Google Drive' })).toBeVisible()
-    expect(drive.files(A.id)).toHaveLength(1)
+    expect(drive.files(A.id).filter((f) => f.name === 'gymbook-backup.json')).toHaveLength(1)
     expect(stored(drive, A.id).data.members[0].notes).toBe('Prefers mornings')
   })
 
@@ -357,7 +361,7 @@ test.describe('Google Drive backup', () => {
     await page.clock.fastForward('00:40')
     await expect.poll(() => drive.uploads()).toBe(2)
     expect(stored(drive, A.id).data.plans.map((p) => p.name).sort()).toEqual(['Monthly', 'Quarterly'])
-    expect(drive.files(A.id)).toHaveLength(1)
+    expect(drive.files(A.id).filter((f) => f.name === 'gymbook-backup.json')).toHaveLength(1)
 
     // another change, then the app is closed before the two minutes are up: nothing can run
     await page.getByRole('button', { name: 'New plan' }).first().click()
@@ -410,7 +414,7 @@ test.describe('Google Drive backup', () => {
     await expect(d3).toBeHidden()
     await third.clock.fastForward('02:05')
     await expect.poll(() => drive.uploads()).toBe(4)
-    expect(drive.files(A.id)).toHaveLength(1)
+    expect(drive.files(A.id).filter((f) => f.name === 'gymbook-backup.json')).toHaveLength(1)
 
     // switched off: changes are no longer uploaded by themselves
     await third.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Settings', exact: true }).click()
@@ -458,7 +462,7 @@ test.describe('Google Drive backup', () => {
     await expect(replace).toContainText('Only one backup is kept')
     await replace.getByRole('button', { name: 'Cancel' }).click()
     expect(drive.uploads()).toBe(uploads)
-    expect(byId(stored(drive, A.id).data.members)).toEqual(original.members)
+    expect(byId(stored(drive, A.id).data.members)).toEqual(bare(original.members))
 
     // back at the offer; restore instead: the local data is downloaded as a file before it is replaced
     await offer.getByRole('button', { name: 'Review and restore' }).click()

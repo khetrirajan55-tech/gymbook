@@ -3,13 +3,14 @@ import 'fake-indexeddb/auto'
 import { IDBFactory } from 'fake-indexeddb'
 import { createHash } from 'node:crypto'
 import { closeDb, getDb } from '../db'
-import { createMember, updateMember, listMembers } from '../services/members'
+import { createMember, updateMember, listMembers, setMemberPhoto } from '../services/members'
+import { getPhotoRecord } from '../services/photos'
 import { createPlan } from '../services/plans'
 import { createMemberWithMembership } from '../services/memberships'
-import { validateBackup } from '../backup'
+import { exportBackup, validateBackup } from '../backup'
 import { FakeDrive } from '@/test/fakeDrive'
 import { createDriveClient, DriveError, SINGLE_REQUEST_LIMIT } from './driveApi'
-import { assessSignIn, BackupBlocked, BACKUP_FILE_NAME, changedSinceBackup, decodeBackupBytes, encodeForUpload, findRemoteBackup, isBackupOverdue, loadRemoteBackup, restoreFromDrive, runBackup, takeSnapshot } from './driveBackup'
+import { assessSignIn, BackupBlocked, BACKUP_FILE_NAME, PHOTO_PACK_NAME, changedSinceBackup, decodeBackupBytes, encodeForUpload, findRemoteBackup, isBackupOverdue, loadRemoteBackup, restoreFromDrive, runBackup, takeSnapshot } from './driveBackup'
 import { clearLink, loadLink, saveLink } from './driveState'
 import { md5Hex, sha256Hex } from './md5'
 import { canGzip, gunzip, gzip, isGzip } from './gzip'
@@ -21,6 +22,9 @@ const PHOTO = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQ
 
 let drive: FakeDrive
 const noWait = () => Promise.resolve()
+/** The backup's data file(s) in an account, without the photo packs that sit beside it. */
+const dataFiles = (accountId: string) => drive.files(accountId).filter((f) => f.name === BACKUP_FILE_NAME)
+const packFiles = (accountId: string) => drive.files(accountId).filter((f) => f.name === PHOTO_PACK_NAME)
 const clientFor = (token: string) => createDriveClient(token, { fetch: drive.fetch, sleep: noWait })
 const A = { id: 'acct-a', email: 'owner.a@example.com' }
 const B = { id: 'acct-b', email: 'owner.b@example.com' }
@@ -70,21 +74,87 @@ describe('backing up', () => {
     const result = await runBackup(clientFor('token-a'), account)
     expect(result).toMatchObject({ status: 'uploaded', created: true })
 
-    const files = drive.files(A.id)
+    const files = dataFiles(A.id)
     expect(files).toHaveLength(1)
     expect(files[0].name).toBe(BACKUP_FILE_NAME)
     const stored = validateBackup(await decodeBackupBytes(files[0].content))
     expect(stored.ok).toBe(true)
     expect(stored.counts).toMatchObject({ members: 1, plans: 1, memberships: 1, invoices: 1, payments: 1 })
-    expect(stored.backup!.data.members[0]).toMatchObject({ id: sold.member.id, name: 'Rahul Patil', photoDataUrl: PHOTO, heightCm: 172, weightKg: 68.5 })
-    expect(files[0].appProperties).toMatchObject({ format: 'gymbook-backup', formatVersion: '1', members: '1' })
+    // The data file names the photo by its fingerprint; the picture itself is in one pack beside it, stored once.
+    const photoHash = createHash('sha256').update(PHOTO).digest('hex')
+    expect(stored.backup!.data.members[0]).toMatchObject({ id: sold.member.id, name: 'Rahul Patil', photoHash, heightCm: 172, weightKg: 68.5 })
+    expect(stored.backup!.data.members[0].photoDataUrl).toBeUndefined()
+    expect(files[0].appProperties).toMatchObject({ format: 'gymbook-backup', formatVersion: '1', members: '1', photos: 'packs', photoCount: '1' })
+    const packs = packFiles(A.id)
+    expect(packs).toHaveLength(1)
+    expect(JSON.parse(await decodeBackupBytes(packs[0].content))).toMatchObject({ format: 'gymbook-photos', photos: { [photoHash]: PHOTO } })
+    expect(JSON.parse(await decodeBackupBytes(files[0].content)).photoPacks).toEqual([{ id: packs[0].id, size: packs[0].content.length, hashes: [photoHash] }])
 
     const link = loadLink()!
     expect(link).toMatchObject({ accountId: A.id, email: A.email, fileId: files[0].id, lastBackupAt: files[0].modifiedTime, lastBackupMembers: 1, auto: true })
-    expect(link.lastBackupSize).toBe(files[0].content.length)
+    expect(link.lastBackupSize).toBe(files[0].content.length + packs[0].content.length)
     expect(link.lastBackupHash).toBe(files[0].appProperties.contentHash)
     // nothing about the Google session is kept
     expect(JSON.stringify(localStorage)).not.toContain('token-a')
+  })
+
+  it('a later backup sends only what changed: the data file again, and only a photo Drive does not hold yet', async () => {
+    const sold = await seedGym()
+    const client = clientFor('token-a')
+    const account = await client.account()
+    await runBackup(client, account)
+    expect(drive.uploads(PHOTO_PACK_NAME)).toBe(1)
+    const firstPack = packFiles(A.id)[0]
+
+    // A record changes, the photo does not: no photo travels again.
+    await createMember({ name: 'No Photo', phone: '9811100020', joiningDate: today })
+    await runBackup(client, account)
+    expect(drive.uploads()).toBe(2)
+    expect(drive.uploads(PHOTO_PACK_NAME)).toBe(1)
+    expect(packFiles(A.id).map((f) => f.id)).toEqual([firstPack.id])
+
+    // A second member gets a different photo: one new pack with just that photo.
+    const other = 'data:image/jpeg;base64,' + 'B'.repeat(400)
+    const second = await createMember({ name: 'New Photo', phone: '9811100021', joiningDate: today, photoDataUrl: other })
+    await runBackup(client, account)
+    expect(drive.uploads(PHOTO_PACK_NAME)).toBe(2)
+    expect(packFiles(A.id)).toHaveLength(2)
+    const newest = packFiles(A.id).find((f) => f.id !== firstPack.id)!
+    expect(Object.values(JSON.parse(await decodeBackupBytes(newest.content)).photos)).toEqual([other])
+
+    // The first member's photo is replaced: its old pack holds nothing live any more and is deleted after the upload.
+    const m = (await listMembers()).find((x) => x.id === sold.member.id)!
+    await setMemberPhoto(m.id, m.rev, 'data:image/jpeg;base64,' + 'C'.repeat(500))
+    await runBackup(client, account)
+    expect(packFiles(A.id).some((f) => f.id === firstPack.id)).toBe(false)
+    expect(packFiles(A.id)).toHaveLength(2)
+
+    // Everything comes back on an empty device, each photo with its member.
+    await freshDatabase()
+    clearLink()
+    const preview = await loadRemoteBackup(client, (await findRemoteBackup(client, null))!)
+    expect(preview.packs).toHaveLength(2)
+    expect(await restoreFromDrive(account, preview, () => undefined, client)).toEqual({ safetyCopySaved: false, mismatches: [], missingPhotos: 0 })
+    const back = await listMembers()
+    expect(back).toHaveLength(3)
+    expect((await getPhotoRecord(sold.member.id))?.dataUrl).toBe('data:image/jpeg;base64,' + 'C'.repeat(500))
+    expect((await getPhotoRecord(second.id))?.dataUrl).toBe(other)
+    expect(back.find((x) => x.name === 'No Photo')?.photoDataUrl).toBeUndefined()
+  })
+
+  it('a photo pack missing from Drive costs that photo only: the records are restored and the loss is reported', async () => {
+    const sold = await seedGym()
+    const client = clientFor('token-a')
+    const account = await client.account()
+    await runBackup(client, account)
+    const preview = await loadRemoteBackup(client, (await findRemoteBackup(client, null))!)
+    packFiles(A.id)[0].content = new TextEncoder().encode(JSON.stringify({ format: 'gymbook-photos', version: 1, photos: {} }))
+    await freshDatabase()
+    clearLink()
+    expect(await restoreFromDrive(account, preview, () => undefined, client)).toEqual({ safetyCopySaved: false, mismatches: [], missingPhotos: 1 })
+    const [back] = await listMembers()
+    expect(back).toMatchObject({ id: sold.member.id, name: 'Rahul Patil' })
+    expect(back.photoDataUrl).toBeUndefined()
   })
 
   it('unchanged data is not uploaded again; a change replaces the same file instead of adding one', async () => {
@@ -105,8 +175,8 @@ describe('backing up', () => {
     expect(second).toMatchObject({ status: 'uploaded', created: false })
     expect(second.file.id).toBe(first.file.id)
     expect(second.file.modifiedTime > first.file.modifiedTime).toBe(true)
-    expect(drive.files(A.id)).toHaveLength(1)
-    expect(validateBackup(await decodeBackupBytes(drive.files(A.id)[0].content)).backup!.data.members[0]).toMatchObject({ id: sold.member.id, name: 'Rahul S. Patil' })
+    expect(dataFiles(A.id)).toHaveLength(1)
+    expect(validateBackup(await decodeBackupBytes(dataFiles(A.id)[0].content)).backup!.data.members[0]).toMatchObject({ id: sold.member.id, name: 'Rahul S. Patil' })
     expect(loadLink()!.lastBackupAt).toBe(second.file.modifiedTime)
   })
 
@@ -125,14 +195,22 @@ describe('backing up', () => {
     }
     for (let i = 0; i < 24; i++) await createMember({ name: `Member ${i}`, phone: `98200${String(10000 + i)}`, joiningDate: today, photoDataUrl: `data:image/jpeg;base64,${noise(390_000)}` })
     const client = clientFor('token-a')
-    const snapshot = await takeSnapshot()
-    expect((await encodeForUpload(snapshot.bytes)).bytes.length).toBeGreaterThan(SINGLE_REQUEST_LIMIT)
     const result = await runBackup(client, await client.account())
     expect(result.status).toBe('uploaded')
+    // The photos, not the data file, are what is large now. They go up in several packs, each small enough for one request.
+    const packs = packFiles(A.id)
+    expect(packs.length).toBeGreaterThan(1)
+    expect(Math.max(...packs.map((f) => f.content.length))).toBeLessThanOrEqual(SINGLE_REQUEST_LIMIT)
+    // A file over the single-request limit still goes through an upload session and comes back whole.
+    const big = Uint8Array.from({ length: SINGLE_REQUEST_LIMIT + 4096 }, (_, i) => (i * 7) & 255)
+    const stored = await client.upload({ name: 'big.bin', bytes: big, appProperties: {} })
     expect(drive.log.some((l) => l.method === 'PUT' && l.path.startsWith('/upload/'))).toBe(true)
-    expect(drive.files(A.id)[0].content.length).toBe(result.file.size)
-    expect(result.file.size).toBeGreaterThan(SINGLE_REQUEST_LIMIT)
-    expect(validateBackup(await decodeBackupBytes(drive.files(A.id)[0].content)).counts.members).toBe(25)
+    expect(stored.size).toBe(big.length)
+    expect(stored.md5Checksum).toBe(createHash('md5').update(big).digest('hex'))
+    expect(dataFiles(A.id)[0].content.length).toBe(result.file.size)
+    expect(result.file.size).toBeLessThan(100_000)
+    expect(Number(result.file.appProperties.photoBytes)).toBe(packs.reduce((sum, f) => sum + f.content.length, 0))
+    expect(validateBackup(await decodeBackupBytes(dataFiles(A.id)[0].content)).counts.members).toBe(25)
   })
 })
 
@@ -141,7 +219,7 @@ describe('keeping Google accounts apart', () => {
     await seedGym()
     const a = clientFor('token-a')
     await runBackup(a, await a.account())
-    const fileA = drive.files(A.id)[0]
+    const fileA = dataFiles(A.id)[0]
 
     const b = clientFor('token-b')
     const accountB = await b.account()
@@ -155,7 +233,7 @@ describe('keeping Google accounts apart', () => {
     const before = drive.uploads()
     await expect(runBackup(b, accountB)).rejects.toMatchObject({ name: 'BackupBlocked', reason: 'other-account' })
     expect(drive.uploads()).toBe(before)
-    expect(drive.files(B.id)).toEqual([])
+    expect(dataFiles(B.id)).toEqual([])
     expect(loadLink()!.accountId).toBe(A.id)
   })
 
@@ -163,13 +241,13 @@ describe('keeping Google accounts apart', () => {
     await seedGym()
     const a = clientFor('token-a')
     await runBackup(a, await a.account())
-    const fileA = { ...drive.files(A.id)[0] }
+    const fileA = { ...dataFiles(A.id)[0] }
     const b = clientFor('token-b')
     const result = await runBackup(b, await b.account(), { replace: true })
     expect(result).toMatchObject({ status: 'uploaded', created: true })
-    expect(drive.files(B.id)).toHaveLength(1)
-    expect(drive.files(A.id)[0]).toEqual(fileA)
-    expect(loadLink()).toMatchObject({ accountId: B.id, email: B.email, fileId: drive.files(B.id)[0].id })
+    expect(dataFiles(B.id)).toHaveLength(1)
+    expect(dataFiles(A.id)[0]).toEqual(fileA)
+    expect(loadLink()).toMatchObject({ accountId: B.id, email: B.email, fileId: dataFiles(B.id)[0].id })
   })
 
   it('signing in to an account that already has a backup offers a restore; it never uploads or restores by itself', async () => {
@@ -177,7 +255,7 @@ describe('keeping Google accounts apart', () => {
     const a = clientFor('token-a')
     const account = await a.account()
     await runBackup(a, account)
-    const remote = drive.files(A.id)[0]
+    const remote = dataFiles(A.id)[0]
 
     // a new browser: different records, no link
     await freshDatabase()
@@ -191,7 +269,7 @@ describe('keeping Google accounts apart', () => {
     expect(blocked).toBeInstanceOf(BackupBlocked)
     expect(blocked).toMatchObject({ reason: 'remote-exists', localMembers: 1 })
     expect(drive.uploads()).toBe(before)
-    expect(drive.files(A.id)[0].modifiedTime).toBe(remote.modifiedTime)
+    expect(dataFiles(A.id)[0].modifiedTime).toBe(remote.modifiedTime)
     expect(loadLink()).toBeNull()
     expect((await listMembers()).map((m) => m.name)).toEqual(['Someone Else'])
   })
@@ -208,7 +286,7 @@ describe('keeping Google accounts apart', () => {
     clearLink()
     await createMember({ name: 'Other Device', phone: '9811100001', joiningDate: today })
     await runBackup(a, account, { replace: true })
-    const theirs = drive.files(A.id)[0].modifiedTime
+    const theirs = dataFiles(A.id)[0].modifiedTime
 
     // back on the first device, with a change of its own
     await freshDatabase()
@@ -216,7 +294,7 @@ describe('keeping Google accounts apart', () => {
     await createMember({ name: 'First Device Again', phone: '9811100002', joiningDate: today })
     expect(assessSignIn(mine, account, await findRemoteBackup(a, mine), false).kind).toBe('remote-changed')
     await expect(runBackup(a, account)).rejects.toMatchObject({ reason: 'remote-changed' })
-    expect(drive.files(A.id)[0].modifiedTime).toBe(theirs)
+    expect(dataFiles(A.id)[0].modifiedTime).toBe(theirs)
   })
 
   it('a device with far fewer members than the backup is stopped, then allowed on request', async () => {
@@ -234,9 +312,9 @@ describe('keeping Google accounts apart', () => {
     const stopped = await runBackup(a, account).catch((e) => e)
     expect(stopped).toMatchObject({ reason: 'shrink', localMembers: 1 })
     expect(stopped.message).toContain('has 1 member but the backup in Google Drive has 6')
-    expect(validateBackup(await decodeBackupBytes(drive.files(A.id)[0].content)).counts.members).toBe(6)
+    expect(validateBackup(await decodeBackupBytes(dataFiles(A.id)[0].content)).counts.members).toBe(6)
     await runBackup(a, account, { replace: true })
-    expect(validateBackup(await decodeBackupBytes(drive.files(A.id)[0].content)).counts.members).toBe(1)
+    expect(validateBackup(await decodeBackupBytes(dataFiles(A.id)[0].content)).counts.members).toBe(1)
   })
 })
 
@@ -254,8 +332,8 @@ describe('restoring', () => {
     const preview = await loadRemoteBackup(a, remote)
     expect(preview.preview.ok).toBe(true)
     const copies: string[] = []
-    const result = await restoreFromDrive(account, preview, (name) => copies.push(name))
-    expect(result).toEqual({ safetyCopySaved: false, mismatches: [] })
+    const result = await restoreFromDrive(account, preview, (name) => copies.push(name), a)
+    expect(result).toEqual({ safetyCopySaved: false, mismatches: [], missingPhotos: 0 })
     expect(copies).toEqual([])
 
     const [member] = await listMembers()
@@ -268,7 +346,7 @@ describe('restoring', () => {
     // the restored device and Drive agree, so the next backup is not treated as a conflict
     expect(assessSignIn(loadLink(), account, remote, false).kind).toBe('ready')
     await expect(runBackup(a, account)).resolves.toMatchObject({ status: 'uploaded', created: false })
-    expect(drive.files(A.id)).toHaveLength(1)
+    expect(dataFiles(A.id)).toHaveLength(1)
   })
 
   it('data already on the device is handed over as a valid backup before it is replaced', async () => {
@@ -282,8 +360,8 @@ describe('restoring', () => {
     await createMember({ name: 'Local Only', phone: '9811100004', joiningDate: today })
     const preview = await loadRemoteBackup(a, (await findRemoteBackup(a, null))!)
     const copies: { name: string; json: string }[] = []
-    const result = await restoreFromDrive(account, preview, (name, json) => copies.push({ name, json }))
-    expect(result).toEqual({ safetyCopySaved: true, mismatches: [] })
+    const result = await restoreFromDrive(account, preview, (name, json) => copies.push({ name, json }), a)
+    expect(result).toEqual({ safetyCopySaved: true, mismatches: [], missingPhotos: 0 })
     expect(copies).toHaveLength(1)
     expect(copies[0].name).toMatch(/^gymbook-before-restore-\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2}\.json$/)
     const saved = validateBackup(copies[0].json)
@@ -306,7 +384,7 @@ describe('restoring', () => {
       const preview = await loadRemoteBackup(a, (await a.get(file.id))!)
       expect(preview.preview.ok).toBe(false)
       expect(preview.preview.errors[0]).toMatch(message)
-      await expect(restoreFromDrive(account, preview, () => undefined)).rejects.toMatchObject({ kind: 'verify' })
+      await expect(restoreFromDrive(account, preview, () => undefined, a)).rejects.toMatchObject({ kind: 'verify' })
     }
     // records that point at each other wrongly are caught too
     const good = (await takeSnapshot()).backup
@@ -328,7 +406,7 @@ describe('failures are reported and leave the last good backup in place', () => 
     const a = clientFor('token-a')
     const account = await a.account()
     await runBackup(a, account)
-    const good = { ...drive.files(A.id)[0] }
+    const good = { ...dataFiles(A.id)[0] }
     const link = loadLink()!
     await createMember({ name: 'Added Later', phone: '9811100006', joiningDate: today })
     return { a, account, good, link }
@@ -340,7 +418,7 @@ describe('failures are reported and leave the last good backup in place', () => 
     const err = await runBackup(a, account).catch((e) => e)
     expect(err).toBeInstanceOf(DriveError)
     expect(err).toMatchObject({ kind: 'offline' })
-    expect(drive.files(A.id)[0]).toEqual(good)
+    expect(dataFiles(A.id)[0]).toEqual(good)
     expect(loadLink()).toMatchObject({ lastBackupAt: link.lastBackupAt, lastBackupHash: link.lastBackupHash })
   })
 
@@ -349,15 +427,15 @@ describe('failures are reported and leave the last good backup in place', () => 
     drive.failNext(isUpload, 'network', 1)
     const result = await runBackup(a, account)
     expect(result).toMatchObject({ status: 'uploaded', created: false })
-    expect(drive.files(A.id)).toHaveLength(1)
-    expect(drive.files(A.id)[0].modifiedTime > good.modifiedTime).toBe(true)
+    expect(dataFiles(A.id)).toHaveLength(1)
+    expect(dataFiles(A.id)[0].modifiedTime > good.modifiedTime).toBe(true)
   })
 
   it('an expired or revoked sign-in is reported as such', async () => {
     const { a, account, good } = await backedUpThenChanged()
     drive.revoke('token-a')
     await expect(runBackup(a, account)).rejects.toMatchObject({ kind: 'auth', status: 401 })
-    expect(drive.files(A.id)[0]).toEqual(good)
+    expect(dataFiles(A.id)[0]).toEqual(good)
   })
 
   it('a missing Drive permission is reported as a permission problem', async () => {
@@ -372,7 +450,7 @@ describe('failures are reported and leave the last good backup in place', () => 
     const err = await runBackup(a, account).catch((e) => e)
     expect(err).toMatchObject({ kind: 'quota' })
     expect(err.message).toMatch(/storage is full/)
-    expect(drive.files(A.id)[0]).toEqual(good)
+    expect(dataFiles(A.id)[0]).toEqual(good)
     expect(loadLink()!.lastBackupHash).toBe(link.lastBackupHash)
   })
 
@@ -397,7 +475,7 @@ describe('failures are reported and leave the last good backup in place', () => 
     drive.folders.get(A.id)!.delete(good.id)
     const result = await runBackup(a, account)
     expect(result).toMatchObject({ status: 'uploaded', created: true })
-    expect(drive.files(A.id)).toHaveLength(1)
+    expect(dataFiles(A.id)).toHaveLength(1)
     expect(loadLink()!.fileId).toBe(result.file.id)
   })
 })
@@ -428,45 +506,48 @@ describe('compression', () => {
     const a = clientFor('token-a')
     const account = await a.account()
     const result = await runBackup(a, account)
-    const [file] = drive.files(A.id)
+    const [file] = dataFiles(A.id)
     expect(isGzip(file.content)).toBe(true)
     expect(file.appProperties.encoding).toBe('gzip')
     expect(result.file.size).toBe(file.content.length)
     expect(result.file.md5Checksum).toBe(createHash('md5').update(file.content).digest('hex'))
-    const plain = (await takeSnapshot()).bytes
+    const plain = gunzipSync(file.content)
     expect(file.content.length).toBeLessThan(plain.length)
-    // What Drive holds, opened by Node's own gzip, is a valid backup with the member and the photo.
-    const stored = validateBackup(gunzipSync(file.content).toString('utf8'))
+    // What Drive holds, opened by Node's own gzip, is a valid backup with the member; the photo is in its pack, also gzip.
+    const stored = validateBackup(plain.toString('utf8'))
     expect(stored.ok).toBe(true)
-    expect(stored.backup!.data.members[0]).toMatchObject({ id: sold.member.id, photoDataUrl: PHOTO })
+    expect(stored.backup!.data.members[0]).toMatchObject({ id: sold.member.id, photoHash: createHash('sha256').update(PHOTO).digest('hex') })
+    expect(isGzip(packFiles(A.id)[0].content)).toBe(true)
 
     await freshDatabase()
     clearLink()
     const preview = await loadRemoteBackup(a, (await findRemoteBackup(a, null))!)
     expect(preview.preview.ok).toBe(true)
-    expect(await restoreFromDrive(account, preview, () => undefined)).toEqual({ safetyCopySaved: false, mismatches: [] })
+    expect(await restoreFromDrive(account, preview, () => undefined, a)).toEqual({ safetyCopySaved: false, mismatches: [], missingPhotos: 0 })
     expect((await listMembers())[0]).toMatchObject({ id: sold.member.id, name: 'Rahul Patil', photoDataUrl: PHOTO })
   })
 
   it('a plain JSON backup made before compression existed is still found and restored', async () => {
     const sold = await seedGym('Made Before')
-    const old = await takeSnapshot()
-    drive.seed(A.id, BACKUP_FILE_NAME, JSON.stringify(old.backup), { contentHash: old.hash, members: '1' })
+    // As the app wrote it before photos were stored apart: the full picture inside the member record, no packs.
+    const everything = await exportBackup()
+    const legacy = { ...everything, data: { ...everything.data, photos: [], members: everything.data.members.map((m) => ({ ...m, photoHash: undefined })) } }
+    drive.seed(A.id, BACKUP_FILE_NAME, JSON.stringify(legacy), { contentHash: 'made-by-an-older-version', members: '1' })
     await freshDatabase()
     clearLink()
     const a = clientFor('token-a')
     const account = await a.account()
     const remote = (await findRemoteBackup(a, null))!
-    expect(isGzip(drive.files(A.id)[0].content)).toBe(false)
+    expect(isGzip(dataFiles(A.id)[0].content)).toBe(false)
     const preview = await loadRemoteBackup(a, remote)
     expect(preview.preview.ok).toBe(true)
-    expect(await restoreFromDrive(account, preview, () => undefined)).toEqual({ safetyCopySaved: false, mismatches: [] })
+    expect(await restoreFromDrive(account, preview, () => undefined, a)).toEqual({ safetyCopySaved: false, mismatches: [], missingPhotos: 0 })
     expect((await listMembers())[0]).toMatchObject({ id: sold.member.id, name: 'Made Before', photoDataUrl: PHOTO })
     // The next backup replaces that same file, now compressed.
     await updateMember(sold.member.id, sold.member.rev, { name: 'Made Before, Renamed', phone: '9820012345', joiningDate: today })
     await expect(runBackup(a, account)).resolves.toMatchObject({ status: 'uploaded', created: false })
-    expect(drive.files(A.id)).toHaveLength(1)
-    expect(isGzip(drive.files(A.id)[0].content)).toBe(true)
+    expect(dataFiles(A.id)).toHaveLength(1)
+    expect(isGzip(dataFiles(A.id)[0].content)).toBe(true)
   })
 
   it('a compressed backup that was cut short or damaged is refused and nothing is restored', async () => {
@@ -474,7 +555,7 @@ describe('compression', () => {
     const a = clientFor('token-a')
     const account = await a.account()
     await runBackup(a, account)
-    const [file] = drive.files(A.id)
+    const [file] = dataFiles(A.id)
     await freshDatabase()
     clearLink()
     await createMember({ name: 'Keep Me', phone: '9811100005', joiningDate: today })
@@ -486,7 +567,7 @@ describe('compression', () => {
       const preview = await loadRemoteBackup(a, (await a.get(file.id))!)
       expect(preview.preview.ok).toBe(false)
       expect(preview.preview.errors[0]).toMatch(/damaged|not valid JSON|invalid/i)
-      await expect(restoreFromDrive(account, preview, () => undefined)).rejects.toMatchObject({ kind: 'verify' })
+      await expect(restoreFromDrive(account, preview, () => undefined, a)).rejects.toMatchObject({ kind: 'verify' })
     }
     expect((await listMembers()).map((m) => m.name)).toEqual(['Keep Me'])
   })
@@ -500,7 +581,7 @@ describe('compression', () => {
     const a = clientFor('token-a')
     const account = await a.account()
     await runBackup(a, account)
-    const [file] = drive.files(A.id)
+    const [file] = dataFiles(A.id)
     expect(isGzip(file.content)).toBe(false)
     expect(file.appProperties.encoding).toBe('identity')
     expect(validateBackup(await decodeBackupBytes(file.content)).ok).toBe(true)
@@ -574,7 +655,7 @@ describe('knowing whether anything changed, without reading the database', () =>
     await freshDatabase()
     clearLink()
     const preview = await loadRemoteBackup(a, (await findRemoteBackup(a, null))!)
-    await restoreFromDrive(account, preview, () => undefined)
+    await restoreFromDrive(account, preview, () => undefined, a)
     expect(changedSinceBackup(loadLink())).toBe(false)
     await createMember({ name: 'After Restore', phone: '9811100009', joiningDate: today })
     expect(changedSinceBackup(loadLink())).toBe(true)

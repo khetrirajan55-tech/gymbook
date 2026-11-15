@@ -88,7 +88,7 @@ export const memberForm = z.object({
   phone: phoneSchema,
   joiningDate: isoDate.refine((v) => v >= '1950-01-01', 'Joining date looks too far in the past').refine((v) => v <= addDays(todayInTz(DEFAULT_TIMEZONE), 366), 'Joining date can be at most a year ahead'),
   notes: optionalText(1000),
-  photoDataUrl: z.string().max(400_000, 'Photo is too large; use a smaller image').optional(),
+  photoDataUrl: z.string().max(1_500_000, 'Photo is too large; use a smaller image').optional(),
   dateOfBirth: z
     .string()
     .trim()

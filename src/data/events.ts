@@ -1,5 +1,6 @@
 export type StoreName =
   | 'members'
+  | 'photos'
   | 'plans'
   | 'memberships'
   | 'invoices'

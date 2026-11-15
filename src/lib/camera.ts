@@ -31,7 +31,7 @@ export const CAMERA_UNSUPPORTED = 'This browser cannot open the camera on this p
  * Centre-crop the current frame of a playing video to a small square JPEG data URL.
  * Square because member photos are shown as round avatars; small because photos live in IndexedDB and in backups.
  */
-export function videoFrameToSmallDataUrl(video: HTMLVideoElement, size = 256): string {
+export function videoFrameToSmallDataUrl(video: HTMLVideoElement, size = 720): string {
   const vw = video.videoWidth
   const vh = video.videoHeight
   if (!vw || !vh) throw new Error('The camera is not ready yet. Try again in a moment.')
@@ -43,5 +43,5 @@ export function videoFrameToSmallDataUrl(video: HTMLVideoElement, size = 256): s
   const ctx = canvas.getContext('2d')
   if (!ctx) throw new Error('Could not process this photo.')
   ctx.drawImage(video, (vw - side) / 2, (vh - side) / 2, side, side, 0, 0, out, out)
-  return canvas.toDataURL('image/jpeg', 0.82)
+  return canvas.toDataURL('image/jpeg', 0.9)
 }

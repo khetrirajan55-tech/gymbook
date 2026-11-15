@@ -2,7 +2,7 @@ import { subscribe as subscribeToData, dataRevision } from '../events'
 import { downloadText } from '@/domain/csv'
 import { GOOGLE_CLIENT_ID, requestGoogleToken, revokeGoogleAccess, SignInError, type GoogleToken } from '@/lib/google'
 import { createDriveClient, DriveError, type DriveAccount, type DriveClient, type DriveFile } from './driveApi'
-import { assessSignIn, BackupBlocked, changedSinceBackup, findRemoteBackup, isBackupOverdue, loadRemoteBackup, restoreFromDrive, runBackup, takeSnapshot, type BlockReason, type RemotePreview, type SignInSituation } from './driveBackup'
+import { assessSignIn, BackupBlocked, backupBytes, changedSinceBackup, findRemoteBackup, isBackupOverdue, loadRemoteBackup, restoreFromDrive, runBackup, takeSnapshot, type BlockReason, type RemotePreview, type SignInSituation } from './driveBackup'
 import { clearLink, loadLink, saveLink, subscribeLink, type DriveLink } from './driveState'
 
 /**
@@ -187,7 +187,8 @@ export async function backupNow(options: { replace?: boolean; automatic?: boolea
       set({ busy: null, notice: options.automatic ? state.notice : notice('info', 'A backup is already running in another tab') })
       return
     }
-    const size = result.file.size < 1_048_576 ? `${Math.max(1, Math.round(result.file.size / 1024))} KB` : `${(result.file.size / 1_048_576).toFixed(1)} MB`
+    const total = backupBytes(result.file)
+    const size = total < 1_048_576 ? `${Math.max(1, Math.round(total / 1024))} KB` : `${(total / 1_048_576).toFixed(1)} MB`
     set({
       busy: null,
       // Something saved while the backup was running is not in it.
@@ -234,12 +235,13 @@ export async function restore(remote: RemotePreview): Promise<boolean> {
   const account = state.account
   set({ busy: 'restore', notice: null, blocked: null })
   try {
-    const result = await exclusive(() => restoreFromDrive(account, remote, (name, json) => downloadText(name, json, 'application/json')))
+    const drive = client()
+    const result = await exclusive(() => restoreFromDrive(account, remote, (name, json) => downloadText(name, json, 'application/json'), drive))
     if (result === 'busy-elsewhere') {
       set({ busy: null, notice: notice('info', 'Another tab is using Google Drive', 'Try again in a moment.') })
       return false
     }
-    const copy = result.safetyCopySaved ? ' A copy of the data that was on this device was downloaded first.' : ''
+    const copy = `${result.missingPhotos > 0 ? ` ${result.missingPhotos} photo${result.missingPhotos === 1 ? '' : 's'} could not be brought back from Drive.` : ''}${result.safetyCopySaved ? ' A copy of the data that was on this device was downloaded first.' : ''}`
     if (result.mismatches.length > 0) {
       set({ busy: null, changed: true, situation: { kind: 'ready', remote: remote.file }, notice: notice('danger', 'Restored, but the check found differences', `These parts do not match the backup: ${result.mismatches.join(', ')}.${copy}`) })
       return false

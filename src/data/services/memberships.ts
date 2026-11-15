@@ -3,6 +3,7 @@ import { logActivity, stampNew, withIdempotency, type AnyWriteTx } from '../repo
 import type { Member, Membership, Plan, Payment, PaymentMethod, ISODate, Paise } from '@/domain/types'
 import type { MemberFormValues } from '@/domain/validation'
 import { insertMember } from './members'
+import { preparePhoto } from './photos'
 import { membershipEndDate, addDays, compareDates, formatDate, formatSpan, todayInTz, DEFAULT_TIMEZONE } from '@/domain/dates'
 import { formatINR } from '@/domain/money'
 import { DomainError } from '../errors'
@@ -154,9 +155,10 @@ export type FirstMembershipInput = Pick<AssignMembershipInput, 'planId' | 'start
  * (archived plan, discount above the price…) the member is not created either, so a retry never leaves a duplicate.
  */
 export async function createMemberWithMembership(values: MemberFormValues, sale: FirstMembershipInput, opts: { requestKey?: string } = {}): Promise<AssignMembershipResult & { member: Member }> {
+  const photo = values.photoDataUrl ? await preparePhoto(values.photoDataUrl) : undefined
   return withIdempotency(opts.requestKey, () =>
-    writeTx([...SALE_STORES], async (tx) => {
-      const member = await insertMember(tx, values)
+    writeTx([...SALE_STORES, 'photos'], async (tx) => {
+      const member = await insertMember(tx as unknown as AnyWriteTx, values, photo)
       return { member, ...(await sellInTx(tx, member, sale)) }
     }),
   )

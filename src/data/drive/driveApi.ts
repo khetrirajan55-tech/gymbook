@@ -55,6 +55,8 @@ export interface DriveClient {
   download(id: string): Promise<Uint8Array>
   /** Create the file, or replace the content of `existingId`. The previous content stays until the upload completes. */
   upload(input: { name: string; bytes: Uint8Array; appProperties: Record<string, string>; existingId?: string; contentType?: string }): Promise<DriveFile>
+  /** Delete a file from the app folder. A file that is already gone counts as removed. */
+  remove(id: string): Promise<void>
 }
 
 const API = 'https://www.googleapis.com/drive/v3'
@@ -116,7 +118,7 @@ export function createDriveClient(token: string, options: DriveClientOptions = {
 
   const list = async (name: string): Promise<DriveFile[]> => {
     const q = `name = '${name.replace(/['\\]/g, '\\$&')}' and trashed = false`
-    const params = new URLSearchParams({ spaces: 'appDataFolder', q, fields: `files(${FILE_FIELDS})`, orderBy: 'modifiedTime desc', pageSize: '20' })
+    const params = new URLSearchParams({ spaces: 'appDataFolder', q, fields: `files(${FILE_FIELDS})`, orderBy: 'modifiedTime desc', pageSize: '200' })
     const body = await json<{ files?: RawFile[] }>(await request(`${API}/files?${params}`))
     return (body.files ?? []).map(toFile)
   }
@@ -179,7 +181,11 @@ export function createDriveClient(token: string, options: DriveClientOptions = {
     throw failure
   }
 
-  return { account, list, get, download, upload }
+  const remove = async (id: string): Promise<void> => {
+    await request(`${API}/files/${encodeURIComponent(id)}`, { method: 'DELETE' }, [404])
+  }
+
+  return { account, list, get, download, upload, remove }
 }
 
 interface RawFile {

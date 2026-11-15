@@ -25,7 +25,10 @@ export interface Member extends BaseRecord {
   joiningDate: ISODate
   status: MemberStatus
   notes?: string
+  /** A small thumbnail for lists and cards. The full picture lives in the `photos` store under the member's id. */
   photoDataUrl?: string
+  /** Fingerprint of the full picture, so a backup can tell which photos Drive already holds. */
+  photoHash?: string
   archivedAt?: ISODateTime
   /** Short unique code printed on the member card and accepted by check-in search (e.g. GB-0042). */
   memberCode?: string
@@ -41,6 +44,15 @@ export interface Member extends BaseRecord {
   trainerId?: string
   emergencyName?: string
   emergencyPhone?: string
+}
+
+/** A member's full-size photo, kept apart from the member record so lists never have to load it. */
+export interface MemberPhoto {
+  /** The member's id. */
+  id: string
+  dataUrl: string
+  hash: string
+  updatedAt: ISODateTime
 }
 
 export type SessionStatus = 'scheduled' | 'completed' | 'cancelled' | 'no_show'
