@@ -164,11 +164,25 @@ function BackupSection() {
     navigator.storage?.estimate?.().then((e) => setEstimate({ usage: e.usage ?? 0, quota: e.quota ?? 0 })).catch(() => {})
   }, [])
 
+  const [lastExport, setLastExport] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem('gymbook-last-export')
+    } catch {
+      return null
+    }
+  })
+
   const doExport = async () => {
     setExporting(true)
     try {
       const b = await exportBackup()
       downloadText(`gymbook-backup-${b.exportedAt.slice(0, 19).replace(/[:T]/g, '-')}.json`, JSON.stringify(b, null, 2), 'application/json')
+      try {
+        localStorage.setItem('gymbook-last-export', b.exportedAt)
+      } catch {
+        // storage blocked: the line under the button simply stays as it was
+      }
+      setLastExport(b.exportedAt)
       toast.success('Backup exported', 'Keep the file somewhere safe; it contains all member and payment data.')
     } catch (err) {
       toast.error('Export failed', errorMessage(err))
@@ -223,6 +237,7 @@ function BackupSection() {
           <input ref={fileRef} type="file" accept="application/json,.json" className="sr-only" onChange={(e) => onFile(e.target.files?.[0])} />
           <Button variant="secondary" icon={<Upload className="h-4 w-4" aria-hidden />} onClick={() => fileRef.current?.click()}>Import backup…</Button>
         </div>
+        <p className="text-sm text-muted">Last file export from this device: <span className="font-medium text-ink">{lastExport ? formatDateTime(lastExport, settings.timezone) : 'not yet'}</span></p>
         {estimate && estimate.quota > 0 ? <p className="text-xs text-muted">Storage used by this site: {fmtMB(estimate.usage)} of about {fmtMB(estimate.quota)} available.</p> : null}
       </CardBody>
       </Card>

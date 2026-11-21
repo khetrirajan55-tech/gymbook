@@ -12,6 +12,13 @@ import { Banner, KeyValue, Section } from '@/components/ui/misc'
 import { Modal } from '@/components/ui/Modal'
 import { cn } from '@/lib/cn'
 
+/** "today", "yesterday" or "N days ago", by calendar day on this device. */
+function agoLabel(iso: string): string {
+  const day = (d: Date) => Math.floor((d.getTime() - d.getTimezoneOffset() * 60_000) / 86_400_000)
+  const n = day(new Date()) - day(new Date(iso))
+  return n <= 0 ? 'today' : n === 1 ? 'yesterday' : `${n} days ago`
+}
+
 const fmtMB = (bytes: number) => (bytes < 1_048_576 ? `${Math.max(1, Math.round(bytes / 1024))} KB` : `${(bytes / 1_048_576).toFixed(1)} MB`)
 
 /** Sections removed from the app; a backup lists them only when it still carries their records. */
@@ -104,6 +111,17 @@ export function DriveBackupSection() {
               {account || link ? <Button variant="ghost" onClick={() => { setOfferDismissed(false); void signIn({ chooseAccount: true }) }} disabled={working}>Use another account</Button> : null}
               {link ? <Button variant="ghost" onClick={() => setConfirmDisconnect(true)} disabled={working}>Disconnect</Button> : null}
             </div>
+            {/* Right under the buttons, readable without signing in: when this device last backed up. */}
+            <p className="text-sm text-muted" data-testid="last-backup-line">
+              Last backup:{' '}
+              {link?.lastBackupAt ? (
+                <>
+                  <span className="font-medium text-ink">{when(link.lastBackupAt)}</span> ({agoLabel(link.lastBackupAt)})
+                </>
+              ) : (
+                <span className="font-medium text-ink">not yet</span>
+              )}
+            </p>
 
             {drive.notice ? (
               <div role={drive.notice.tone === 'danger' ? 'alert' : 'status'} className={cn('rounded-xl border px-4 py-3 text-sm', drive.notice.tone === 'danger' ? 'border-danger/25 bg-danger-soft text-danger' : drive.notice.tone === 'success' ? 'border-success/25 bg-success-soft text-success' : 'border-line bg-sunken/60 text-ink')}>
